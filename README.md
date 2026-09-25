@@ -2,15 +2,15 @@
 
 Planning hebdomadaire de l'équipe dev : qui travaille sur quel projet, les absences, et le bilan mensuel prévu / réel (temps Redmine).
 
-- **Site** : `public/index.html` (une seule page, sans étape de build), publiée par GitLab Pages via `.gitlab-ci.yml`.
+- **Site** : `public/index.html` (une seule page, sans étape de build), publiée par GitHub Pages via `.github/workflows/pages.yml`.
 - **Données** : Supabase, projet `planning-dev` (région Paris). Schéma dans `supabase/schema.sql`.
 - **Connexion** : lien magique envoyé par e-mail (Supabase Auth). Toute personne connectée peut lire et modifier.
 
 ## Mise en route
 
-1. Pousser ce dépôt sur gitlab.com. Le job `pages` publie le site sur `https://<votre-identifiant>.gitlab.io/planning-dev/`.
+1. Pousser ce dépôt sur GitHub, puis dans *Settings → Pages*, choisir **Source : GitHub Actions**. Le workflow publie le site sur `https://<votre-identifiant>.github.io/planning-dev/`.
 2. Dans Supabase → *Authentication* → *URL Configuration* :
-   - **Site URL** : l'adresse GitLab Pages ci-dessus ;
+   - **Site URL** : l'adresse GitHub Pages ci-dessus ;
    - **Redirect URLs** : ajouter la même adresse.
    Sans ça, le lien reçu par e-mail renvoie vers `localhost`.
 
