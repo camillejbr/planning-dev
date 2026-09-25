@@ -261,11 +261,6 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
   background:hsl(var(--h) var(--chip-ts) var(--chip-tl));color:hsl(var(--h) var(--chip-s) var(--chip-l))}
 .cdp.backup{background:transparent;color:inherit;outline:1px dashed currentColor;outline-offset:-1px}
 .cdp.gone{text-decoration:line-through;opacity:.7}
-.grid tr.sep th{background:var(--surface-2);text-align:left;padding:8px 14px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;border-top:1px solid var(--line-strong)}
-.grid tr.sep th span{text-transform:none;letter-spacing:0;font-weight:400;color:var(--faint)}
-.grid tr.cdprow .cell{min-height:48px}
-.grid tr.cdprow .name{font-size:14px}
-.meta .bk{color:var(--faint)}
 .load .pname span{display:flex;flex-direction:column;min-width:0}
 .load .pname small{font-weight:400;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .load .pname small.swap{color:var(--warn)}
@@ -275,6 +270,20 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
 .cdps{display:flex;flex-wrap:wrap;gap:8px;padding-left:38px}
 .cdpsel{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted);font-weight:600;flex:1 1 140px}
 .cdpsel select{font-weight:400;font-size:13px;color:var(--ink)}
+.cdpgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr));gap:16px;align-items:start}
+.cdpcard h3{margin:4px 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.cdpcard .sub{line-height:1.9}
+.pn{display:inline-flex;align-items:center;gap:5px;margin-right:8px;color:var(--ink);font-weight:500}
+.rel.off{background:var(--warn-soft);color:var(--warn)}
+.ranges{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:6px}
+.ranges li{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;font-size:13px}
+.ranges li.past{opacity:.55}
+.ranges .when{font-family:var(--mono);font-size:12px}
+.ranges .num{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.cdpabs{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;padding-top:12px;border-top:1px dashed var(--line-strong)}
+@media (max-width:520px){.cdpabs{grid-template-columns:1fr 1fr}}
+.cdpabs label{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--muted);min-width:0}
+.cdpabs .field{font-size:13px;color:var(--ink);font-weight:400;min-width:0;width:100%}
 /* Settings */
 .settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px;align-items:start}
 @media (max-width:820px){.settings{grid-template-columns:minmax(0,1fr)}}
@@ -350,6 +359,7 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
     <div class="tabs" role="tablist" aria-label="Vues">
       <button role="tab" id="tab-week" data-act="view" data-view="week" aria-selected="true">Semaine</button>
       <button role="tab" id="tab-ov" data-act="view" data-view="overview" aria-selected="false">6 semaines</button>
+      <button role="tab" id="tab-cdp" data-act="view" data-view="cdp" aria-selected="false">Chefs de projet</button>
       <button role="tab" id="tab-rep" data-act="view" data-view="report" aria-selected="false">Bilan du mois</button>
       <button role="tab" id="tab-set" data-act="view" data-view="settings" aria-selected="false">Équipe &amp; projets</button>
     </div>
@@ -518,7 +528,7 @@ function renderBar(){
   const diff = Math.round((parse(weekStart)-parse(mondayOf(t0)))/(7*864e5));
   const rel = diff===0?"Cette semaine":diff===1?"Semaine prochaine":diff===-1?"Semaine dernière":diff>1?`Dans ${diff} semaines`:`Il y a ${-diff} semaines`;
   $("#rel").textContent = rel;
-  $("#weekbar").hidden = view === "settings" || view === "report";
+  $("#weekbar").hidden = view === "settings" || view === "report" || view === "cdp";
   document.querySelectorAll("#actions [data-act=copyprev], #actions [data-act=absence]").forEach(b => b.disabled = readOnly);
   document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view)));
   const sync = $("#sync");
@@ -557,21 +567,6 @@ function renderWeek(){
       todo>0 ? ` · <span class="todo">${fmtV(todo)} à planifier</span>` : over ? ` · <span class="over">+${fmtV(pr-cap)} en trop</span>` : cap>0 ? " · complet" : ""}</span></button></th>${cells}</tr>`;
   }
   if (!devs().length) h += `<tr><td colspan="6" style="padding:24px"><p class="empty-note">Aucun développeur. Ajoutez l’équipe dans l’onglet « Équipe &amp; projets ».</p></td></tr>`;
-  if (cdps().length) {
-    h += `<tr class="sep"><th colspan="6">Chefs de projet <span>— absences uniquement ; le suppléant prend le relais quand le titulaire est absent</span></th></tr>`;
-    for (const c of cdps()) {
-      let off = 0, cells = "";
-      days.forEach((d,i) => {
-        const entries = cellOf(c.id,d), hol = holiday(d);
-        for (const e of entries) if (e.abs) { off += e.v; absences.push({dev:c.id, abs:e.abs, v:e.v, i}); }
-        const key = c.id+"|"+d;
-        cells += `<td><button class="cell cdpcell${sel.has(key)?" sel":""}${hol?" holiday":""}" data-act="cell" data-key="${key}" aria-label="${esc(c.name+", "+DAYS_LONG[i]+" "+dm(d))}" aria-pressed="${sel.has(key)}">${
-          entries.length ? entries.map(e => chip(e)).join("") : hol ? `<span class="holtag">Férié</span>` : `<span class="plus" aria-hidden="true">+</span>`}</button></td>`;
-      });
-      const owned = projects().filter(p => p.cdp === c.id).map(p => p.name), backs = projects().filter(p => p.cdp2 === c.id).map(p => p.name);
-      h += `<tr class="cdprow"><th><button class="who-btn" data-act="selrow" data-dev="${c.id}" title="Poser une absence pour ${esc(c.name)}"><span class="name">${esc(c.name)}</span><span class="meta">${off ? `<span class="todo">absent·e ${fmtV(off)} j</span>` : "présent·e"}${owned.length ? " · "+esc(owned.join(", ")) : ""}${backs.length ? ` · <span class="bk">suppl. ${esc(backs.join(", "))}</span>` : ""}</span></button></th>${cells}</tr>`;
-    }
-  }
   h += `</tbody></table></div>`;
   h += `<p class="hint">Cliquez une case pour l’éditer. Cliquez un prénom pour prendre toute sa semaine, un jour pour toute l’équipe, ou <kbd>⇧ Maj</kbd> / <kbd>⌘</kbd> + clic pour sélectionner plusieurs cases.</p>`;
 
@@ -902,6 +897,48 @@ function abbr(name){
   return name.length <= 4 ? name.toUpperCase() : name.slice(0,3).toUpperCase();
 }
 
+function cdpRanges(id){
+  const dates = [];
+  for (const [wk, w] of Object.entries(weeks)) {
+    const d = w && w.days && w.days[id]; if (!d) continue;
+    for (const [i, entries] of Object.entries(d)) {
+      const a = Array.isArray(entries) && entries.find(e => e.abs);
+      if (a) dates.push({date:addDays(wk, +i), abs:a.abs, v:a.v});
+    }
+  }
+  dates.sort((x,y) => x.date.localeCompare(y.date));
+  const nextWorkday = d => { let n = addDays(d,1); while (dayIdx(n) > 4 || holiday(n)) n = addDays(n,1); return n; };
+  const out = [];
+  for (const x of dates) {
+    const last = out[out.length-1];
+    if (last && last.abs === x.abs && nextWorkday(last.to) === x.date) { last.to = x.date; last.dates.push(x.date); last.days += x.v; }
+    else out.push({abs:x.abs, from:x.date, to:x.date, dates:[x.date], days:x.v});
+  }
+  return out;
+}
+function renderCdp(){
+  const list = cdps();
+  if (!list.length) return `<section class="panel"><h2>Chefs de projet</h2><p class="empty-note">Aucun chef de projet. Ajoutez-les dans l’onglet « Équipe &amp; projets », puis associez-les aux projets.</p></section>`;
+  const limit = addDays(t0, -30);
+  let h = `<p class="hint">Quand le titulaire d’un projet est absent toute la journée, le suppléant apparaît à sa place sur le planning (étiquette en pointillés).</p><div class="cdpgrid">`;
+  for (const c of list) {
+    const owned = projects().filter(p => p.cdp === c.id), backs = projects().filter(p => p.cdp2 === c.id);
+    const ranges = cdpRanges(c.id).filter(r => r.to >= limit);
+    const now = ranges.find(r => r.from <= t0 && r.to >= t0);
+    h += `<section class="panel cdpcard"><div class="phead"><h2>${esc(c.name)}</h2><span class="rel${now?" off":""}">${now ? "Absent·e aujourd’hui" : "Présent·e"}</span></div>
+      <p class="sub">${owned.length ? "Titulaire : "+owned.map(p => `<span class="pn"><i class="dot" style="--h:${p.hue}"></i>${esc(p.name)}</span>`).join(" ") : "Titulaire d’aucun projet"}${backs.length ? "<br>Suppléant : "+backs.map(p => `<span class="pn"><i class="dot" style="--h:${p.hue}"></i>${esc(p.name)}</span>`).join(" ") : ""}</p>
+      <h3>Congés et absences</h3>
+      ${ranges.length ? `<ul class="ranges">${ranges.map(r => `<li class="${r.to < t0 ? "past" : ""}">${chip({abs:r.abs, v:1})}<span class="when">${r.from===r.to ? DAYS_SHORT[dayIdx(r.from)]+" "+dm(r.from) : dm(r.from)+" → "+dm(r.to)}</span><span class="num">${fmtV(r.days)} j</span><button class="x" data-act="cdpabs-del" data-id="${c.id}" data-dates="${r.dates.join(",")}" aria-label="Supprimer cette absence" title="Supprimer" ${readOnly?"disabled":""}>×</button></li>`).join("")}</ul>`
+        : `<p class="empty-note">Aucune absence prévue.</p>`}
+      <form class="cdpabs" data-form="cdpabs" data-id="${c.id}">
+        <label>Du<input class="field" type="date" id="cabs-from-${c.id}" required ${readOnly?"disabled":""}></label>
+        <label>Au<input class="field" type="date" id="cabs-to-${c.id}" required ${readOnly?"disabled":""}></label>
+        <label>Motif<select class="field" id="cabs-type-${c.id}" ${readOnly?"disabled":""}>${Object.entries(ABS).map(([k,a]) => `<option value="${k}">${a.label}</option>`).join("")}</select></label>
+        <button class="btn primary" type="submit" ${readOnly?"disabled":""}>Ajouter</button>
+      </form></section>`;
+  }
+  return h + `</div>`;
+}
 function renderSettings(){
   const dRow = d => `<div class="row"><input type="text" class="field" id="dev-name-${d.id}" data-act="rename-dev" data-id="${d.id}" value="${esc(d.name)}" aria-label="Prénom" ${readOnly?"disabled":""}>${
     confirmRemove===("d:"+d.id) ? `<button class="btn danger" data-act="archive-dev" data-id="${d.id}">Confirmer</button><button class="btn ghost" data-act="cancel-remove">Non</button>`
@@ -923,7 +960,7 @@ function renderSettings(){
       <form class="row addrow" data-form="dev"><input type="text" class="field" id="new-dev" placeholder="Prénom" aria-label="Nouveau développeur" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter</button></form>
       ${archD.length?`<details class="archived"><summary>${archD.length} retiré${archD.length>1?"s":""}</summary>${archD.map(d=>`<div class="row"><span style="flex:1">${esc(d.name)}</span><button class="btn ghost" data-act="restore-dev" data-id="${d.id}">Réintégrer</button></div>`).join("")}</details>`:""}
     </section>
-    <section class="panel"><h2>Chefs de projet</h2><p class="sub">Associez ensuite chaque projet à un CDP titulaire et un suppléant. Les absences des CDP se posent dans la vue Semaine.</p>
+    <section class="panel"><h2>Chefs de projet</h2><p class="sub">Associez ensuite chaque projet à un CDP titulaire et un suppléant. Leurs congés se posent dans l’onglet « Chefs de projet ».</p>
       <div class="rows">${cdps().map(cRow).join("") || `<p class="empty-note">Aucun chef de projet pour l’instant.</p>`}</div>
       <form class="row addrow" data-form="cdp"><input type="text" class="field" id="new-cdp" placeholder="Prénom Nom" aria-label="Nouveau chef de projet" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter</button></form>
       ${archC.length?`<details class="archived"><summary>${archC.length} retiré${archC.length>1?"s":""}</summary>${archC.map(d=>`<div class="row"><span style="flex:1">${esc(d.name)}</span><button class="btn ghost" data-act="restore-cdp" data-id="${d.id}">Réintégrer</button></div>`).join("")}</details>`:""}
@@ -939,7 +976,7 @@ function render(){
   renderBar();
   const main = $("#main");
   const focusId = document.activeElement && document.activeElement.id;
-  main.innerHTML = view==="week" ? renderWeek() : view==="overview" ? renderOverview() : view==="report" ? renderReport() : renderSettings();
+  main.innerHTML = view==="week" ? renderWeek() : view==="overview" ? renderOverview() : view==="report" ? renderReport() : view==="cdp" ? renderCdp() : renderSettings();
   if (focusId && main.querySelector("#"+CSS.escape(focusId))) main.querySelector("#"+CSS.escape(focusId)).focus();
   if (!$("#editor").hidden) renderEditor();
 }
@@ -1100,6 +1137,7 @@ document.addEventListener("click", ev => {
     }
     case "ask-remove": confirmRemove = el.dataset.id; render(); break;
     case "cancel-remove": confirmRemove = null; render(); break;
+    case "cdpabs-del": { const id = el.dataset.id, ds = el.dataset.dates.split(","); writeCells(ds.map(date => ({dev:id, date, entries:[]}))); toast(`Absence de ${devName(id)} supprimée`); break; }
     case "archive-cdp": case "restore-cdp": { const c = cloneConfig(); c.cdps.find(d => d.id===el.dataset.id).archived = act==="archive-cdp"; confirmRemove=null; saveConfig(c); break; }
     case "archive-dev": case "restore-dev": { const c = cloneConfig(); c.devs.find(d => d.id===el.dataset.id).archived = act==="archive-dev"; confirmRemove=null; saveConfig(c); break; }
     case "archive-proj": case "restore-proj": { const c = cloneConfig(); c.projects.find(p => p.id===el.dataset.id).archived = act==="archive-proj"; confirmRemove=null; saveConfig(c); break; }
@@ -1143,6 +1181,15 @@ document.addEventListener("change", ev => {
 });
 document.addEventListener("submit", ev => {
   const f = ev.target; ev.preventDefault();
+  if (f.dataset.form === "cdpabs") {
+    const id = f.dataset.id, from = $("#cabs-from-"+id).value, to = $("#cabs-to-"+id).value, type = $("#cabs-type-"+id).value;
+    if (!from || !to || to < from) { toast("La date de fin doit être après la date de début."); return; }
+    const changes = [];
+    for (let d = from; d <= to && changes.length < 260; d = addDays(d,1)) if (dayIdx(d) <= 4 && !holiday(d)) changes.push({dev:id, date:d, entries:[{abs:type, v:1}]});
+    if (!changes.length) { toast("Aucun jour ouvré dans cette période."); return; }
+    writeCells(changes); toast(`${ABS[type].label} ajouté pour ${devName(id)} : ${changes.length} jour${changes.length>1?"s":""}`);
+    return;
+  }
   if (f.dataset.form === "cdp") { const v = $("#new-cdp").value.trim(); if (!v) return; const c = cloneConfig(); c.cdps = c.cdps || []; c.cdps.push({id:"cdp-"+slug(v,[...c.devs,...c.cdps].map(x => ({id:x.id.replace(/^cdp-/,"")}))), name:v}); saveConfig(c); toast(`${v} ajouté·e aux chefs de projet`); }
   if (f.dataset.form === "dev") { const v = $("#new-dev").value.trim(); if (!v) return; const c = cloneConfig(); c.devs.push({id:slug(v,c.devs), name:v}); saveConfig(c); toast(`${v} ajouté·e à l’équipe`); }
   if (f.dataset.form === "proj") { const v = $("#new-proj").value.trim(); if (!v) return; const c = cloneConfig(); const used = c.projects.map(p=>p.hue); const hue = HUES.find(h => !used.includes(h)) ?? Math.floor(Math.random()*360); c.projects.push({id:slug(v,c.projects), name:v, hue}); saveConfig(c); toast(`Projet « ${v} » ajouté`); }
@@ -1165,8 +1212,7 @@ document.addEventListener("submit", ev => {
 document.addEventListener("keydown", ev => { if (ev.key==="Escape" && (!$("#editor").hidden || !$("#modal").hidden || !$("#imp").hidden)) closeAll(); });
 
 function openAbsence(){
-  $("#abs-dev").innerHTML = `<optgroup label="Développeurs">${devs().map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</optgroup>`
-    + (cdps().length ? `<optgroup label="Chefs de projet">${cdps().map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</optgroup>` : "");
+  $("#abs-dev").innerHTML = devs().map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("");
   $("#abs-type").innerHTML = Object.entries(ABS).map(([k,a]) => `<option value="${k}">${a.label} (${a.code})</option>`).join("");
   $("#abs-from").value = weekStart; $("#abs-to").value = addDays(weekStart,4);
   $("#editor").hidden = true; $("#modal").hidden = false; $("#scrim").hidden = false;
