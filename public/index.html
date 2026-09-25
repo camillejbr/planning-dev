@@ -270,9 +270,6 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
 .cdps{display:flex;flex-wrap:wrap;gap:8px;padding-left:38px}
 .cdpsel{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted);font-weight:600;flex:1 1 140px}
 .cdpsel select{font-weight:400;font-size:13px;color:var(--ink)}
-.cdpgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr));gap:16px;align-items:start}
-.cdpcard h3{margin:4px 0 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
-.cdpcard .sub{line-height:1.9}
 .pn{display:inline-flex;align-items:center;gap:5px;margin-right:8px;color:var(--ink);font-weight:500}
 .rel.off{background:var(--warn-soft);color:var(--warn)}
 .ranges{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:6px}
@@ -284,6 +281,31 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
 @media (max-width:520px){.cdpabs{grid-template-columns:1fr 1fr}}
 .cdpabs label{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--muted);min-width:0}
 .cdpabs .field{font-size:13px;color:var(--ink);font-weight:400;min-width:0;width:100%}
+.setlayout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:28px;align-items:start}
+.toc{position:sticky;top:calc(16px + env(safe-area-inset-top,0px));display:flex;flex-direction:column;gap:2px}
+.toc .eyebrow{margin-bottom:8px}
+.toc a{display:flex;flex-direction:column;gap:1px;padding:8px 12px;border-radius:8px;border-left:3px solid transparent;color:var(--muted);text-decoration:none;font-weight:600;font-size:14px}
+.toc a small{font-weight:400;font-size:11.5px;color:var(--faint);font-family:var(--mono)}
+.toc a:hover{color:var(--ink);background:var(--surface)}
+.toc a.on{color:var(--ink);background:var(--surface);border-left-color:var(--accent)}
+.setmain{display:flex;flex-direction:column;gap:36px;min-width:0}
+.setsec{scroll-margin-top:16px;display:flex;flex-direction:column;gap:12px}
+.setsec>header h2{margin:0;font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-.01em}
+.setsec>header .sub{margin:4px 0 0;color:var(--muted);font-size:13px;max-width:68ch}
+.panel.slim{padding:12px 14px}
+.cdpgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:12px;align-items:start}
+.cdpcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.cdpcard .cname{font-weight:600;font-size:15px}
+.cdpcard h4{margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.roles{margin:0;font-size:13px;line-height:2}
+.roles .rl{display:inline-block;min-width:74px;font-size:11px;color:var(--muted);font-weight:600}
+@media (max-width:760px){
+  .setlayout{grid-template-columns:minmax(0,1fr);gap:16px}
+  .toc{flex-direction:row;overflow-x:auto;background:var(--ground);padding-block:6px;z-index:2;border-bottom:1px solid var(--line)}
+  .toc .eyebrow{display:none}
+  .toc a{border-left:0;border-bottom:3px solid transparent;border-radius:8px 8px 0 0;white-space:nowrap}
+  .toc a.on{border-bottom-color:var(--accent)}
+}
 /* Settings */
 .settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px;align-items:start}
 @media (max-width:820px){.settings{grid-template-columns:minmax(0,1fr)}}
@@ -359,7 +381,6 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
     <div class="tabs" role="tablist" aria-label="Vues">
       <button role="tab" id="tab-week" data-act="view" data-view="week" aria-selected="true">Semaine</button>
       <button role="tab" id="tab-ov" data-act="view" data-view="overview" aria-selected="false">6 semaines</button>
-      <button role="tab" id="tab-cdp" data-act="view" data-view="cdp" aria-selected="false">Chefs de projet</button>
       <button role="tab" id="tab-rep" data-act="view" data-view="report" aria-selected="false">Bilan du mois</button>
       <button role="tab" id="tab-set" data-act="view" data-view="settings" aria-selected="false">Équipe &amp; projets</button>
     </div>
@@ -916,36 +937,32 @@ function cdpRanges(id){
   }
   return out;
 }
-function renderCdp(){
-  const list = cdps();
-  if (!list.length) return `<section class="panel"><h2>Chefs de projet</h2><p class="empty-note">Aucun chef de projet. Ajoutez-les dans l’onglet « Équipe &amp; projets », puis associez-les aux projets.</p></section>`;
+function cdpCard(c){
   const limit = addDays(t0, -30);
-  let h = `<p class="hint">Quand le titulaire d’un projet est absent toute la journée, le suppléant apparaît à sa place sur le planning (étiquette en pointillés).</p><div class="cdpgrid">`;
-  for (const c of list) {
-    const owned = projects().filter(p => p.cdp === c.id), backs = projects().filter(p => p.cdp2 === c.id);
-    const ranges = cdpRanges(c.id).filter(r => r.to >= limit);
-    const now = ranges.find(r => r.from <= t0 && r.to >= t0);
-    h += `<section class="panel cdpcard"><div class="phead"><h2>${esc(c.name)}</h2><span class="rel${now?" off":""}">${now ? "Absent·e aujourd’hui" : "Présent·e"}</span></div>
-      <p class="sub">${owned.length ? "Titulaire : "+owned.map(p => `<span class="pn"><i class="dot" style="--h:${p.hue}"></i>${esc(p.name)}</span>`).join(" ") : "Titulaire d’aucun projet"}${backs.length ? "<br>Suppléant : "+backs.map(p => `<span class="pn"><i class="dot" style="--h:${p.hue}"></i>${esc(p.name)}</span>`).join(" ") : ""}</p>
-      <h3>Congés et absences</h3>
-      ${ranges.length ? `<ul class="ranges">${ranges.map(r => `<li class="${r.to < t0 ? "past" : ""}">${chip({abs:r.abs, v:1})}<span class="when">${r.from===r.to ? DAYS_SHORT[dayIdx(r.from)]+" "+dm(r.from) : dm(r.from)+" → "+dm(r.to)}</span><span class="num">${fmtV(r.days)} j</span><button class="x" data-act="cdpabs-del" data-id="${c.id}" data-dates="${r.dates.join(",")}" aria-label="Supprimer cette absence" title="Supprimer" ${readOnly?"disabled":""}>×</button></li>`).join("")}</ul>`
-        : `<p class="empty-note">Aucune absence prévue.</p>`}
-      <form class="cdpabs" data-form="cdpabs" data-id="${c.id}">
-        <label>Du<input class="field" type="date" id="cabs-from-${c.id}" required ${readOnly?"disabled":""}></label>
-        <label>Au<input class="field" type="date" id="cabs-to-${c.id}" required ${readOnly?"disabled":""}></label>
-        <label>Motif<select class="field" id="cabs-type-${c.id}" ${readOnly?"disabled":""}>${Object.entries(ABS).map(([k,a]) => `<option value="${k}">${a.label}</option>`).join("")}</select></label>
-        <button class="btn primary" type="submit" ${readOnly?"disabled":""}>Ajouter</button>
-      </form></section>`;
-  }
-  return h + `</div>`;
+  const owned = projects().filter(p => p.cdp === c.id), backs = projects().filter(p => p.cdp2 === c.id);
+  const ranges = cdpRanges(c.id).filter(r => r.to >= limit);
+  const now = ranges.find(r => r.from <= t0 && r.to >= t0);
+  const pn = p => `<span class="pn"><i class="dot" style="--h:${p.hue}"></i>${esc(p.name)}</span>`;
+  return `<article class="cdpcard">
+    <div class="row"><input type="text" class="field cname" id="cdp-name-${c.id}" data-act="rename-cdp" data-id="${c.id}" value="${esc(c.name)}" aria-label="Nom du CDP" ${readOnly?"disabled":""}>
+      <span class="rel${now?" off":""}">${now ? "Absent·e aujourd’hui" : "Présent·e"}</span>${
+      confirmRemove===("c:"+c.id) ? `<button class="btn danger" data-act="archive-cdp" data-id="${c.id}">Confirmer</button><button class="btn ghost" data-act="cancel-remove">Non</button>`
+      : `<button class="btn ghost" data-act="ask-remove" data-id="c:${c.id}" ${readOnly?"disabled":""}>Retirer</button>`}</div>
+    <p class="roles">${owned.length ? `<span class="rl">Titulaire</span>${owned.map(pn).join("")}` : `<span class="rl">Titulaire</span><span class="muted">aucun projet</span>`}${backs.length ? `<br><span class="rl">Suppléant</span>${backs.map(pn).join("")}` : ""}</p>
+    <h4>Congés et absences</h4>
+    ${ranges.length ? `<ul class="ranges">${ranges.map(r => `<li class="${r.to < t0 ? "past" : ""}">${chip({abs:r.abs, v:1})}<span class="when">${r.from===r.to ? DAYS_SHORT[dayIdx(r.from)]+" "+dm(r.from) : dm(r.from)+" → "+dm(r.to)}</span><span class="num">${fmtV(r.days)} j</span><button class="x" data-act="cdpabs-del" data-id="${c.id}" data-dates="${r.dates.join(",")}" aria-label="Supprimer cette absence" title="Supprimer" ${readOnly?"disabled":""}>×</button></li>`).join("")}</ul>`
+      : `<p class="empty-note">Aucune absence prévue.</p>`}
+    <form class="cdpabs" data-form="cdpabs" data-id="${c.id}">
+      <label>Du<input class="field" type="date" id="cabs-from-${c.id}" required ${readOnly?"disabled":""}></label>
+      <label>Au<input class="field" type="date" id="cabs-to-${c.id}" required ${readOnly?"disabled":""}></label>
+      <label>Motif<select class="field" id="cabs-type-${c.id}" ${readOnly?"disabled":""}>${Object.entries(ABS).map(([k,a]) => `<option value="${k}">${a.label}</option>`).join("")}</select></label>
+      <button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter l’absence</button>
+    </form></article>`;
 }
 function renderSettings(){
   const dRow = d => `<div class="row"><input type="text" class="field" id="dev-name-${d.id}" data-act="rename-dev" data-id="${d.id}" value="${esc(d.name)}" aria-label="Prénom" ${readOnly?"disabled":""}>${
     confirmRemove===("d:"+d.id) ? `<button class="btn danger" data-act="archive-dev" data-id="${d.id}">Confirmer</button><button class="btn ghost" data-act="cancel-remove">Non</button>`
     : `<button class="btn ghost" data-act="ask-remove" data-id="d:${d.id}" ${readOnly?"disabled":""}>Retirer</button>`}</div>`;
-  const cRow = d => `<div class="row"><input type="text" class="field" id="cdp-name-${d.id}" data-act="rename-cdp" data-id="${d.id}" value="${esc(d.name)}" aria-label="Nom du CDP" ${readOnly?"disabled":""}>${
-    confirmRemove===("c:"+d.id) ? `<button class="btn danger" data-act="archive-cdp" data-id="${d.id}">Confirmer</button><button class="btn ghost" data-act="cancel-remove">Non</button>`
-    : `<button class="btn ghost" data-act="ask-remove" data-id="c:${d.id}" ${readOnly?"disabled":""}>Retirer</button>`}</div>`;
   const cdpSel = (p, field, label) => `<label class="cdpsel"><span>${label}</span><select class="field" id="proj-${field}-${p.id}" data-act="proj-cdp" data-id="${p.id}" data-field="${field}" ${readOnly?"disabled":""}><option value="">—</option>${
     (config.cdps||[]).filter(c => !c.archived || c.id === p[field]).map(c => `<option value="${c.id}"${p[field]===c.id?" selected":""}>${esc(c.name)}</option>`).join("")}</select></label>`;
   const pRow = p => `<div class="pblock"><div class="row"><button class="swatch" style="--h:${p.hue}" data-act="hue" data-id="${p.id}" aria-label="Changer la couleur de ${esc(p.name)}" title="Changer la couleur" ${readOnly?"disabled":""}></button><input type="text" class="field" id="proj-name-${p.id}" data-act="rename-proj" data-id="${p.id}" value="${esc(p.name)}" aria-label="Nom du projet" ${readOnly?"disabled":""}>${
@@ -954,29 +971,64 @@ function renderSettings(){
     (config.cdps||[]).length ? `<div class="cdps">${cdpSel(p,"cdp","CDP titulaire")}${cdpSel(p,"cdp2","CDP suppléant")}</div>` : ""}</div>`;
   const archC = (config.cdps||[]).filter(d => d.archived);
   const archD = config.devs.filter(d => d.archived), archP = config.projects.filter(p => p.archived);
-  return `<div class="settings"><div class="col">
-    <section class="panel"><h2>Développeurs</h2><p class="sub">Retirer quelqu’un le masque du planning sans effacer son historique.</p>
-      <div class="rows">${devs().map(dRow).join("")}</div>
-      <form class="row addrow" data-form="dev"><input type="text" class="field" id="new-dev" placeholder="Prénom" aria-label="Nouveau développeur" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter</button></form>
-      ${archD.length?`<details class="archived"><summary>${archD.length} retiré${archD.length>1?"s":""}</summary>${archD.map(d=>`<div class="row"><span style="flex:1">${esc(d.name)}</span><button class="btn ghost" data-act="restore-dev" data-id="${d.id}">Réintégrer</button></div>`).join("")}</details>`:""}
+  const offToday = cdps().filter(c => offDay(c.id, t0)).length;
+  const noCdp = projects().filter(p => !p.cdp).length;
+  const toc = [
+    ["sec-devs", "Développeurs", `${devs().length}`],
+    ["sec-cdp", "Chefs de projet", `${cdps().length}${offToday ? ` · ${offToday} absent${offToday>1?"s":""}` : ""}`],
+    ["sec-proj", "Projets", `${projects().length}${noCdp && cdps().length ? ` · ${noCdp} sans CDP` : ""}`],
+  ];
+  return `<div class="setlayout">
+    <nav class="toc" aria-label="Sommaire">
+      <p class="eyebrow">Sommaire</p>
+      ${toc.map(([id,label,meta], i) => `<a href="#${id}" data-act="toc" data-target="${id}" class="${tocActive===id || (!tocActive && i===0) ? "on" : ""}"><span>${label}</span><small>${meta}</small></a>`).join("")}
+    </nav>
+    <div class="setmain">
+    <section class="setsec" id="sec-devs">
+      <header><h2>Développeurs</h2><p class="sub">Les lignes du planning. Retirer quelqu’un le masque du planning sans effacer son historique.</p></header>
+      <div class="panel">
+        <div class="rows">${devs().map(dRow).join("")}</div>
+        <form class="row addrow" data-form="dev"><input type="text" class="field" id="new-dev" placeholder="Prénom" aria-label="Nouveau développeur" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter</button></form>
+        ${archD.length?`<details class="archived"><summary>${archD.length} retiré${archD.length>1?"s":""}</summary>${archD.map(d=>`<div class="row"><span style="flex:1">${esc(d.name)}</span><button class="btn ghost" data-act="restore-dev" data-id="${d.id}">Réintégrer</button></div>`).join("")}</details>`:""}
+      </div>
     </section>
-    <section class="panel"><h2>Chefs de projet</h2><p class="sub">Associez ensuite chaque projet à un CDP titulaire et un suppléant. Leurs congés se posent dans l’onglet « Chefs de projet ».</p>
-      <div class="rows">${cdps().map(cRow).join("") || `<p class="empty-note">Aucun chef de projet pour l’instant.</p>`}</div>
-      <form class="row addrow" data-form="cdp"><input type="text" class="field" id="new-cdp" placeholder="Prénom Nom" aria-label="Nouveau chef de projet" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter</button></form>
-      ${archC.length?`<details class="archived"><summary>${archC.length} retiré${archC.length>1?"s":""}</summary>${archC.map(d=>`<div class="row"><span style="flex:1">${esc(d.name)}</span><button class="btn ghost" data-act="restore-cdp" data-id="${d.id}">Réintégrer</button></div>`).join("")}</details>`:""}
-    </section></div>
-    <section class="panel"><h2>Projets</h2><p class="sub">Cliquez la pastille pour changer de couleur. Le CDP qui gère s’affiche sur chaque case du planning (en pointillés quand c’est le suppléant). Archiver un projet le retire des choix sans toucher aux semaines passées.</p>
-      <div class="rows">${projects().map(pRow).join("")}</div>
-      <form class="row addrow" data-form="proj"><input type="text" class="field" id="new-proj" placeholder="Nom du projet" aria-label="Nouveau projet" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter</button></form>
-      ${archP.length?`<details class="archived"><summary>${archP.length} projet${archP.length>1?"s":""} archivé${archP.length>1?"s":""}</summary>${archP.map(p=>`<div class="row"><i class="dot" style="--h:${p.hue}"></i><span style="flex:1">${esc(p.name)}</span><button class="btn ghost" data-act="restore-proj" data-id="${p.id}">Restaurer</button></div>`).join("")}</details>`:""}
-    </section></div>`;
+    <section class="setsec" id="sec-cdp">
+      <header><h2>Chefs de projet</h2><p class="sub">Leurs congés ne s’affichent pas sur le planning, mais ils décident qui gère : quand le titulaire d’un projet est absent toute la journée, le suppléant prend sa place (étiquette en pointillés sur les cases).</p></header>
+      ${cdps().length ? `<div class="cdpgrid">${cdps().map(cdpCard).join("")}</div>` : `<div class="panel"><p class="empty-note">Aucun chef de projet pour l’instant.</p></div>`}
+      <div class="panel slim">
+        <form class="row" data-form="cdp"><input type="text" class="field" id="new-cdp" placeholder="Prénom Nom" aria-label="Nouveau chef de projet" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter un CDP</button></form>
+        ${archC.length?`<details class="archived"><summary>${archC.length} retiré${archC.length>1?"s":""}</summary>${archC.map(d=>`<div class="row"><span style="flex:1">${esc(d.name)}</span><button class="btn ghost" data-act="restore-cdp" data-id="${d.id}">Réintégrer</button></div>`).join("")}</details>`:""}
+      </div>
+    </section>
+    <section class="setsec" id="sec-proj">
+      <header><h2>Projets</h2><p class="sub">Cliquez la pastille pour changer de couleur. Choisissez un CDP titulaire et un suppléant pour chaque projet. Archiver un projet le retire des choix sans toucher aux semaines passées.</p></header>
+      <div class="panel">
+        <div class="rows">${projects().map(pRow).join("")}</div>
+        <form class="row addrow" data-form="proj"><input type="text" class="field" id="new-proj" placeholder="Nom du projet" aria-label="Nouveau projet" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter</button></form>
+        ${archP.length?`<details class="archived"><summary>${archP.length} projet${archP.length>1?"s":""} archivé${archP.length>1?"s":""}</summary>${archP.map(p=>`<div class="row"><i class="dot" style="--h:${p.hue}"></i><span style="flex:1">${esc(p.name)}</span><button class="btn ghost" data-act="restore-proj" data-id="${p.id}">Restaurer</button></div>`).join("")}</details>`:""}
+      </div>
+    </section>
+    </div></div>`;
+}
+let tocActive = null, tocObs = null;
+function setupToc(){
+  if (tocObs) { tocObs.disconnect(); tocObs = null; }
+  if (view !== "settings" || !("IntersectionObserver" in window)) return;
+  tocObs = new IntersectionObserver(es => {
+    for (const e of es) if (e.isIntersecting) {
+      tocActive = e.target.id;
+      document.querySelectorAll(".toc a").forEach(a => a.classList.toggle("on", a.dataset.target === tocActive));
+    }
+  }, {rootMargin: "-15% 0px -70% 0px"});
+  document.querySelectorAll(".setsec").forEach(s => tocObs.observe(s));
 }
 
 function render(){
   renderBar();
   const main = $("#main");
   const focusId = document.activeElement && document.activeElement.id;
-  main.innerHTML = view==="week" ? renderWeek() : view==="overview" ? renderOverview() : view==="report" ? renderReport() : view==="cdp" ? renderCdp() : renderSettings();
+  main.innerHTML = view==="week" ? renderWeek() : view==="overview" ? renderOverview() : view==="report" ? renderReport() : renderSettings();
+  setupToc();
   if (focusId && main.querySelector("#"+CSS.escape(focusId))) main.querySelector("#"+CSS.escape(focusId)).focus();
   if (!$("#editor").hidden) renderEditor();
 }
@@ -1137,6 +1189,14 @@ document.addEventListener("click", ev => {
     }
     case "ask-remove": confirmRemove = el.dataset.id; render(); break;
     case "cancel-remove": confirmRemove = null; render(); break;
+    case "toc": {
+      ev.preventDefault();
+      const t = document.getElementById(el.dataset.target); if (!t) break;
+      tocActive = el.dataset.target;
+      document.querySelectorAll(".toc a").forEach(a => a.classList.toggle("on", a === el));
+      t.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start"});
+      break;
+    }
     case "cdpabs-del": { const id = el.dataset.id, ds = el.dataset.dates.split(","); writeCells(ds.map(date => ({dev:id, date, entries:[]}))); toast(`Absence de ${devName(id)} supprimée`); break; }
     case "archive-cdp": case "restore-cdp": { const c = cloneConfig(); c.cdps.find(d => d.id===el.dataset.id).archived = act==="archive-cdp"; confirmRemove=null; saveConfig(c); break; }
     case "archive-dev": case "restore-dev": { const c = cloneConfig(); c.devs.find(d => d.id===el.dataset.id).archived = act==="archive-dev"; confirmRemove=null; saveConfig(c); break; }
