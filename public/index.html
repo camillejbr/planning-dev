@@ -330,8 +330,7 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
     <div class="brand">
       <h1>Planning Dev</h1>
       <span class="sync" id="sync">Connexion…</span>
-      <span class="sync" id="who"></span><button class="btn ghost" id="logout" hidden>Se déconnecter</button>
-    </div>
+          </div>
     <div class="tabs" role="tablist" aria-label="Vues">
       <button role="tab" id="tab-week" data-act="view" data-view="week" aria-selected="true">Semaine</button>
       <button role="tab" id="tab-ov" data-act="view" data-view="overview" aria-selected="false">6 semaines</button>
@@ -375,14 +374,10 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
 </div>
 <div class="modal wide" id="imp" hidden role="dialog" aria-labelledby="imp-title"></div>
 <div class="login" id="login">
-  <form class="login-card" id="login-form">
+  <div class="login-card">
     <h1>Planning Dev</h1>
-    <p>Recevez un lien de connexion par e-mail pour accéder au planning de l’équipe.</p>
-    <label for="login-email">Adresse e-mail</label>
-    <input class="field" type="email" id="login-email" required autocomplete="email" placeholder="prenom.nom@exemple.fr">
-    <button class="btn primary" id="login-btn" type="submit">Recevoir le lien</button>
-    <p class="hint" id="login-msg" role="status"></p>
-  </form>
+    <p class="hint" id="login-msg" role="status">Connexion…</p>
+  </div>
 </div>
 <div class="toast" id="toast" hidden role="status" aria-live="polite"></div>
 
@@ -1175,23 +1170,13 @@ render();
   if (!window.supabase) { mode = "local"; render(); toast("Impossible de charger Supabase : vérifiez la connexion."); return; }
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   let started = false;
-  const boot = session => {
-    $("#login").hidden = !!session;
-    $("#logout").hidden = !session;
-    if (session) { $("#who").textContent = session.user.email || ""; if (!started) { started = true; db = makeDb(sb); startData(); } }
-  };
+  const start = () => { if (started) return; started = true; $("#login").hidden = true; db = makeDb(sb); startData(); };
   const {data} = await sb.auth.getSession();
-  boot(data.session);
-  sb.auth.onAuthStateChange((_ev, session) => boot(session));
-  $("#login-form").addEventListener("submit", async ev => {
-    ev.preventDefault(); ev.stopPropagation();
-    const email = $("#login-email").value.trim(); if (!email) return;
-    const btn = $("#login-btn"); btn.disabled = true;
-    const {error} = await sb.auth.signInWithOtp({email, options:{emailRedirectTo: location.origin + location.pathname}});
-    btn.disabled = false;
-    $("#login-msg").textContent = error ? "Envoi impossible : " + error.message : `Lien envoyé à ${email}. Ouvrez-le depuis ce navigateur pour vous connecter.`;
-  }, true);
-  $("#logout").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
+  if (data.session) return start();
+  // Pas de vérification par e-mail : chaque navigateur ouvre une session anonyme, gardée ensuite.
+  const {error} = await sb.auth.signInAnonymously();
+  if (error) { $("#login-msg").textContent = "Connexion impossible : " + error.message; return; }
+  start();
 })();
 })();
 </script>

@@ -4,15 +4,12 @@ Planning hebdomadaire de l'équipe dev : qui travaille sur quel projet, les abse
 
 - **Site** : `public/index.html` (une seule page, sans étape de build), publiée par GitHub Pages via `.github/workflows/pages.yml`.
 - **Données** : Supabase, projet `planning-dev` (région Paris). Schéma dans `supabase/schema.sql`.
-- **Connexion** : lien magique envoyé par e-mail (Supabase Auth). Toute personne connectée peut lire et modifier.
+- **Connexion** : aucune. Chaque navigateur ouvre automatiquement une session anonyme Supabase ; toute personne qui a l'adresse du site peut lire et modifier.
 
 ## Mise en route
 
 1. Pousser ce dépôt sur GitHub, puis dans *Settings → Pages*, choisir **Source : GitHub Actions**. Le workflow publie le site sur `https://<votre-identifiant>.github.io/planning-dev/`.
-2. Dans Supabase → *Authentication* → *URL Configuration* :
-   - **Site URL** : l'adresse GitHub Pages ci-dessus ;
-   - **Redirect URLs** : ajouter la même adresse.
-   Sans ça, le lien reçu par e-mail renvoie vers `localhost`.
+2. Dans Supabase → *Authentication* → *Sign In / Providers* : activer **Allow anonymous sign-ins**.
 
 ## Données
 

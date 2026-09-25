@@ -10,7 +10,7 @@ create table public.planning_docs (
 alter table public.planning_docs replica identity full;
 alter table public.planning_docs enable row level security;
 
--- Toute personne connectée (lien magique par e-mail) peut lire et modifier.
+-- Toute session (y compris anonyme, ouverte automatiquement par la page) peut lire et modifier.
 create policy "lecture equipe" on public.planning_docs for select to authenticated using (true);
 create policy "ajout equipe" on public.planning_docs for insert to authenticated with check (true);
 create policy "modif equipe" on public.planning_docs for update to authenticated using (true) with check (true);
