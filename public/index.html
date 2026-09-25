@@ -257,6 +257,24 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
 .login-card h1{margin:0;font-family:var(--display);font-size:26px;letter-spacing:-.02em}
 .login-card p{margin:0;color:var(--muted)}
 .login-card label{font-size:12px;font-weight:600;color:var(--muted);margin-top:6px}
+.cdp{--h:220;font-style:normal;font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.02em;padding:0 4px;border-radius:4px;margin-left:2px;
+  background:hsl(var(--h) var(--chip-ts) var(--chip-tl));color:hsl(var(--h) var(--chip-s) var(--chip-l))}
+.cdp.backup{background:transparent;color:inherit;outline:1px dashed currentColor;outline-offset:-1px}
+.cdp.gone{text-decoration:line-through;opacity:.7}
+.grid tr.sep th{background:var(--surface-2);text-align:left;padding:8px 14px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;border-top:1px solid var(--line-strong)}
+.grid tr.sep th span{text-transform:none;letter-spacing:0;font-weight:400;color:var(--faint)}
+.grid tr.cdprow .cell{min-height:48px}
+.grid tr.cdprow .name{font-size:14px}
+.meta .bk{color:var(--faint)}
+.load .pname span{display:flex;flex-direction:column;min-width:0}
+.load .pname small{font-weight:400;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.load .pname small.swap{color:var(--warn)}
+.settings>.col{display:flex;flex-direction:column;gap:16px}
+.pblock{display:flex;flex-direction:column;gap:6px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.pblock:last-child{border-bottom:0}
+.cdps{display:flex;flex-wrap:wrap;gap:8px;padding-left:38px}
+.cdpsel{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted);font-weight:600;flex:1 1 140px}
+.cdpsel select{font-weight:400;font-size:13px;color:var(--ink)}
 /* Settings */
 .settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px;align-items:start}
 @media (max-width:820px){.settings{grid-template-columns:minmax(0,1fr)}}
@@ -454,7 +472,24 @@ const fmtV = v => v === 0.5 ? "½" : String(v).replace(".", ",");
 const devs = () => config.devs.filter(d => !d.archived);
 const projects = () => config.projects.filter(p => !p.archived);
 const proj = id => config.projects.find(p => p.id === id);
-const devName = id => (config.devs.find(d => d.id === id) || {name:id}).name;
+const cdps = () => (config.cdps || []).filter(c => !c.archived);
+const isCdp = id => (config.cdps || []).some(c => c.id === id);
+const devName = id => ([...config.devs, ...(config.cdps || [])].find(d => d.id === id) || {name:id}).name;
+const initials = name => { const w = String(name).trim().split(/[\s-]+/).filter(Boolean); return (w.length > 1 ? w[0][0] + w[1][0] : String(name).slice(0,2)).toUpperCase(); };
+const offDay = (id, date) => cellOf(id, date).reduce((s,e) => s + (e.abs ? e.v : 0), 0) >= 1;
+/* Qui gère le projet ce jour-là : le CDP titulaire, ou le suppléant si le titulaire est absent. */
+function cdpFor(pid, date){
+  const p = proj(pid); if (!p || !p.cdp) return null;
+  if (!offDay(p.cdp, date)) return {id:p.cdp, backup:false};
+  if (p.cdp2 && !offDay(p.cdp2, date)) return {id:p.cdp2, backup:true, for:p.cdp};
+  return {id:p.cdp, backup:false, absent:true};
+}
+function cdpTag(pid, date){
+  const c = cdpFor(pid, date); if (!c) return "";
+  const n = devName(c.id);
+  const t = c.backup ? `CDP : ${n} (remplace ${devName(c.for)}, absent·e)` : c.absent ? `CDP : ${n}, absent·e et pas de suppléant disponible` : `CDP : ${n}`;
+  return `<i class="cdp${c.backup?" backup":""}${c.absent?" gone":""}" title="${esc(t)}">${esc(initials(n))}</i>`;
+}
 
 function cellOf(dev, date){
   const w = weeks[mondayOf(date)];
@@ -469,10 +504,10 @@ function stats(entries, date){
 }
 
 /* ---------- Rendering ---------- */
-function chip(e){
+function chip(e, date){
   if (e.abs) { const a = ABS[e.abs] || {label:e.abs}; return `<span class="chip abs abs-${esc(e.abs)}">${esc(a.label)}${e.v<1?" <b>½</b>":""}</span>`; }
   const p = proj(e.p);
-  return `<span class="chip" style="--h:${p?p.hue:0}">${esc(p?p.name:e.p)}${e.v<1?" <b>½</b>":""}</span>`;
+  return `<span class="chip" style="--h:${p?p.hue:0}">${esc(p?p.name:e.p)}${e.v<1?" <b>½</b>":""}${typeof date === "string" ? cdpTag(e.p, date) : ""}</span>`;
 }
 
 function renderBar(){
@@ -514,7 +549,7 @@ function renderWeek(){
       const key = dv.id+"|"+d;
       const label = `${dv.name}, ${DAYS_LONG[i]} ${dm(d)} : ${entries.length?entries.map(e=>e.abs?(ABS[e.abs]||{}).label:(proj(e.p)||{name:e.p}).name).join(", "):"vide"}`;
       cells += `<td><button class="cell${sel.has(key)?" sel":""}${hol?" holiday":""}${st.over?" overload":""}" data-act="cell" data-key="${key}" aria-label="${esc(label)}" aria-pressed="${sel.has(key)}">${
-        entries.length ? entries.map(chip).join("") : hol ? `<span class="holtag">Férié</span>` : `<span class="plus" aria-hidden="true">+</span>`
+        entries.length ? entries.map(e => chip(e, d)).join("") : hol ? `<span class="holtag">Férié</span>` : `<span class="plus" aria-hidden="true">+</span>`
       }</button></td>`;
     });
     const todo = Math.max(0, cap-pr), over = pr > cap;
@@ -522,6 +557,21 @@ function renderWeek(){
       todo>0 ? ` · <span class="todo">${fmtV(todo)} à planifier</span>` : over ? ` · <span class="over">+${fmtV(pr-cap)} en trop</span>` : cap>0 ? " · complet" : ""}</span></button></th>${cells}</tr>`;
   }
   if (!devs().length) h += `<tr><td colspan="6" style="padding:24px"><p class="empty-note">Aucun développeur. Ajoutez l’équipe dans l’onglet « Équipe &amp; projets ».</p></td></tr>`;
+  if (cdps().length) {
+    h += `<tr class="sep"><th colspan="6">Chefs de projet <span>— absences uniquement ; le suppléant prend le relais quand le titulaire est absent</span></th></tr>`;
+    for (const c of cdps()) {
+      let off = 0, cells = "";
+      days.forEach((d,i) => {
+        const entries = cellOf(c.id,d), hol = holiday(d);
+        for (const e of entries) if (e.abs) { off += e.v; absences.push({dev:c.id, abs:e.abs, v:e.v, i}); }
+        const key = c.id+"|"+d;
+        cells += `<td><button class="cell cdpcell${sel.has(key)?" sel":""}${hol?" holiday":""}" data-act="cell" data-key="${key}" aria-label="${esc(c.name+", "+DAYS_LONG[i]+" "+dm(d))}" aria-pressed="${sel.has(key)}">${
+          entries.length ? entries.map(e => chip(e)).join("") : hol ? `<span class="holtag">Férié</span>` : `<span class="plus" aria-hidden="true">+</span>`}</button></td>`;
+      });
+      const owned = projects().filter(p => p.cdp === c.id).map(p => p.name), backs = projects().filter(p => p.cdp2 === c.id).map(p => p.name);
+      h += `<tr class="cdprow"><th><button class="who-btn" data-act="selrow" data-dev="${c.id}" title="Poser une absence pour ${esc(c.name)}"><span class="name">${esc(c.name)}</span><span class="meta">${off ? `<span class="todo">absent·e ${fmtV(off)} j</span>` : "présent·e"}${owned.length ? " · "+esc(owned.join(", ")) : ""}${backs.length ? ` · <span class="bk">suppl. ${esc(backs.join(", "))}</span>` : ""}</span></button></th>${cells}</tr>`;
+    }
+  }
   h += `</tbody></table></div>`;
   h += `<p class="hint">Cliquez une case pour l’éditer. Cliquez un prénom pour prendre toute sa semaine, un jour pour toute l’équipe, ou <kbd>⇧ Maj</kbd> / <kbd>⌘</kbd> + clic pour sélectionner plusieurs cases.</p>`;
 
@@ -532,7 +582,10 @@ function renderWeek(){
     s += `<div class="load">` + rows.map(([pid,o]) => {
       const p = proj(pid) || {name:pid,hue:0};
       const who = Object.entries(o.who).map(([id,v]) => devName(id)+(v!==5?` ${fmtV(v)} j`:"")).join(", ");
-      return `<div class="pname"><i class="dot" style="--h:${p.hue}"></i><span>${esc(p.name)}</span></div><div class="bar" style="--h:${p.hue}"><i style="width:${(o.v/max*100).toFixed(1)}%"></i><em>${esc(who)}</em></div><div class="num">${fmtV(o.v)} j</div>`;
+      const mg = []; days.forEach((d,i) => { const c = cdpFor(pid, d); if (!c) return; const last = mg[mg.length-1]; if (last && last.id === c.id) last.days.push(i); else mg.push({...c, days:[i]}); });
+      const cdpTxt = !mg.length ? "" : mg.length === 1 && mg[0].days.length === 5 ? `CDP ${devName(mg[0].id)}`
+        : "CDP " + mg.map(m => `${devName(m.id)}${m.backup?" (suppl.)":""} ${m.days.length===1?DAYS_SHORT[m.days[0]]:DAYS_SHORT[m.days[0]]+"–"+DAYS_SHORT[m.days[m.days.length-1]]}`).join(" · ");
+      return `<div class="pname"><i class="dot" style="--h:${p.hue}"></i><span>${esc(p.name)}${cdpTxt?`<small class="${mg.some(m=>m.backup||m.absent)?"swap":""}">${esc(cdpTxt)}</small>`:""}</span></div><div class="bar" style="--h:${p.hue}"><i style="width:${(o.v/max*100).toFixed(1)}%"></i><em>${esc(who)}</em></div><div class="num">${fmtV(o.v)} j</div>`;
     }).join("") + `</div>`;
   } else s += `<p class="empty-note">Rien de planifié cette semaine pour l’instant.</p>`;
   s += `</section><section class="panel"><h2>Absences</h2>`;
@@ -554,7 +607,7 @@ function renderOverview(){
     h += `<tr><th>${esc(dv.name)}</th>`;
     for (const w of starts) for (let i=0;i<5;i++) {
       const d = addDays(w,i), entries = cellOf(dv.id,d), hol = holiday(d);
-      const tip = `${dv.name} · ${DAYS_SHORT[i]} ${dm(d)}${hol?" · férié ("+hol+")":""}${entries.length?" — "+entries.map(e => (e.abs?(ABS[e.abs]||{label:e.abs}).label:(proj(e.p)||{name:e.p}).name)+(e.v<1?" ½":"")).join(" + "):""}`;
+      const tip = `${dv.name} · ${DAYS_SHORT[i]} ${dm(d)}${hol?" · férié ("+hol+")":""}${entries.length?" — "+entries.map(e => (e.abs?(ABS[e.abs]||{label:e.abs}).label:(proj(e.p)||{name:e.p}).name+(cdpFor(e.p,d)?" (CDP "+devName(cdpFor(e.p,d).id)+")":""))+(e.v<1?" ½":"")).join(" + "):""}`;
       const segs = entries.map(e => {
         if (e.abs) return `<span class="seg abs abs-${esc(e.abs)}" style="flex-grow:${e.v}">${esc((ABS[e.abs]||{code:"?"}).code)}</span>`;
         const p = proj(e.p) || {name:e.p,hue:0};
@@ -853,17 +906,29 @@ function renderSettings(){
   const dRow = d => `<div class="row"><input type="text" class="field" id="dev-name-${d.id}" data-act="rename-dev" data-id="${d.id}" value="${esc(d.name)}" aria-label="Prénom" ${readOnly?"disabled":""}>${
     confirmRemove===("d:"+d.id) ? `<button class="btn danger" data-act="archive-dev" data-id="${d.id}">Confirmer</button><button class="btn ghost" data-act="cancel-remove">Non</button>`
     : `<button class="btn ghost" data-act="ask-remove" data-id="d:${d.id}" ${readOnly?"disabled":""}>Retirer</button>`}</div>`;
-  const pRow = p => `<div class="row"><button class="swatch" style="--h:${p.hue}" data-act="hue" data-id="${p.id}" aria-label="Changer la couleur de ${esc(p.name)}" title="Changer la couleur" ${readOnly?"disabled":""}></button><input type="text" class="field" id="proj-name-${p.id}" data-act="rename-proj" data-id="${p.id}" value="${esc(p.name)}" aria-label="Nom du projet" ${readOnly?"disabled":""}>${
+  const cRow = d => `<div class="row"><input type="text" class="field" id="cdp-name-${d.id}" data-act="rename-cdp" data-id="${d.id}" value="${esc(d.name)}" aria-label="Nom du CDP" ${readOnly?"disabled":""}>${
+    confirmRemove===("c:"+d.id) ? `<button class="btn danger" data-act="archive-cdp" data-id="${d.id}">Confirmer</button><button class="btn ghost" data-act="cancel-remove">Non</button>`
+    : `<button class="btn ghost" data-act="ask-remove" data-id="c:${d.id}" ${readOnly?"disabled":""}>Retirer</button>`}</div>`;
+  const cdpSel = (p, field, label) => `<label class="cdpsel"><span>${label}</span><select class="field" id="proj-${field}-${p.id}" data-act="proj-cdp" data-id="${p.id}" data-field="${field}" ${readOnly?"disabled":""}><option value="">—</option>${
+    (config.cdps||[]).filter(c => !c.archived || c.id === p[field]).map(c => `<option value="${c.id}"${p[field]===c.id?" selected":""}>${esc(c.name)}</option>`).join("")}</select></label>`;
+  const pRow = p => `<div class="pblock"><div class="row"><button class="swatch" style="--h:${p.hue}" data-act="hue" data-id="${p.id}" aria-label="Changer la couleur de ${esc(p.name)}" title="Changer la couleur" ${readOnly?"disabled":""}></button><input type="text" class="field" id="proj-name-${p.id}" data-act="rename-proj" data-id="${p.id}" value="${esc(p.name)}" aria-label="Nom du projet" ${readOnly?"disabled":""}>${
     confirmRemove===("p:"+p.id) ? `<button class="btn danger" data-act="archive-proj" data-id="${p.id}">Confirmer</button><button class="btn ghost" data-act="cancel-remove">Non</button>`
-    : `<button class="btn ghost" data-act="ask-remove" data-id="p:${p.id}" ${readOnly?"disabled":""}>Archiver</button>`}</div>`;
+    : `<button class="btn ghost" data-act="ask-remove" data-id="p:${p.id}" ${readOnly?"disabled":""}>Archiver</button>`}</div>${
+    (config.cdps||[]).length ? `<div class="cdps">${cdpSel(p,"cdp","CDP titulaire")}${cdpSel(p,"cdp2","CDP suppléant")}</div>` : ""}</div>`;
+  const archC = (config.cdps||[]).filter(d => d.archived);
   const archD = config.devs.filter(d => d.archived), archP = config.projects.filter(p => p.archived);
-  return `<div class="settings">
+  return `<div class="settings"><div class="col">
     <section class="panel"><h2>Développeurs</h2><p class="sub">Retirer quelqu’un le masque du planning sans effacer son historique.</p>
       <div class="rows">${devs().map(dRow).join("")}</div>
       <form class="row addrow" data-form="dev"><input type="text" class="field" id="new-dev" placeholder="Prénom" aria-label="Nouveau développeur" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter</button></form>
       ${archD.length?`<details class="archived"><summary>${archD.length} retiré${archD.length>1?"s":""}</summary>${archD.map(d=>`<div class="row"><span style="flex:1">${esc(d.name)}</span><button class="btn ghost" data-act="restore-dev" data-id="${d.id}">Réintégrer</button></div>`).join("")}</details>`:""}
     </section>
-    <section class="panel"><h2>Projets</h2><p class="sub">Cliquez la pastille pour changer de couleur. Archiver un projet le retire des choix sans toucher aux semaines passées.</p>
+    <section class="panel"><h2>Chefs de projet</h2><p class="sub">Associez ensuite chaque projet à un CDP titulaire et un suppléant. Les absences des CDP se posent dans la vue Semaine.</p>
+      <div class="rows">${cdps().map(cRow).join("") || `<p class="empty-note">Aucun chef de projet pour l’instant.</p>`}</div>
+      <form class="row addrow" data-form="cdp"><input type="text" class="field" id="new-cdp" placeholder="Prénom Nom" aria-label="Nouveau chef de projet" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter</button></form>
+      ${archC.length?`<details class="archived"><summary>${archC.length} retiré${archC.length>1?"s":""}</summary>${archC.map(d=>`<div class="row"><span style="flex:1">${esc(d.name)}</span><button class="btn ghost" data-act="restore-cdp" data-id="${d.id}">Réintégrer</button></div>`).join("")}</details>`:""}
+    </section></div>
+    <section class="panel"><h2>Projets</h2><p class="sub">Cliquez la pastille pour changer de couleur. Le CDP qui gère s’affiche sur chaque case du planning (en pointillés quand c’est le suppléant). Archiver un projet le retire des choix sans toucher aux semaines passées.</p>
       <div class="rows">${projects().map(pRow).join("")}</div>
       <form class="row addrow" data-form="proj"><input type="text" class="field" id="new-proj" placeholder="Nom du projet" aria-label="Nouveau projet" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter</button></form>
       ${archP.length?`<details class="archived"><summary>${archP.length} projet${archP.length>1?"s":""} archivé${archP.length>1?"s":""}</summary>${archP.map(p=>`<div class="row"><i class="dot" style="--h:${p.hue}"></i><span style="flex:1">${esc(p.name)}</span><button class="btn ghost" data-act="restore-proj" data-id="${p.id}">Restaurer</button></div>`).join("")}</details>`:""}
@@ -903,7 +968,7 @@ function renderEditor(){
         <div class="segctl" role="group" aria-label="Durée à ajouter"><button data-act="addval" data-v="1" aria-pressed="${addVal===1}">Journée</button><button data-act="addval" data-v="0.5" aria-pressed="${addVal===0.5}">½ journée</button></div>
         <p class="hint" style="margin-top:6px">${addVal===1?"Un choix « journée » remplace le contenu de la case.":"Les demi-journées s’ajoutent : combinez deux projets, ou un projet et une absence."}</p>
       </div>
-      <div><h3>Projets</h3><div class="pick">${projects().map(p => `<button data-act="pickp" data-id="${p.id}" aria-pressed="${inDraft("p",p.id)}" ${readOnly?"disabled":""}><i class="dot" style="--h:${p.hue}"></i>${esc(p.name)}</button>`).join("")}</div></div>
+      ${keys.every(k => isCdp(k.split("|")[0])) ? "" : `<div><h3>Projets</h3><div class="pick">${projects().map(p => `<button data-act="pickp" data-id="${p.id}" aria-pressed="${inDraft("p",p.id)}" ${readOnly?"disabled":""}><i class="dot" style="--h:${p.hue}"></i>${esc(p.name)}</button>`).join("")}</div></div>`}
       <div><h3>Absences</h3><div class="pick">${Object.entries(ABS).map(([k,a]) => `<button data-act="picka" data-id="${k}" aria-pressed="${inDraft("abs",k)}" ${readOnly?"disabled":""}><span class="code">${a.code}</span>${a.label}</button>`).join("")}</div></div>
       ${ds.length===1 && keys.length<5 ? `<div><button class="linkish" data-act="selrow" data-dev="${ds[0]}" data-keep="1">Étendre à toute la semaine de ${esc(devName(ds[0]))}</button></div>`:""}
     </div>
@@ -1035,6 +1100,7 @@ document.addEventListener("click", ev => {
     }
     case "ask-remove": confirmRemove = el.dataset.id; render(); break;
     case "cancel-remove": confirmRemove = null; render(); break;
+    case "archive-cdp": case "restore-cdp": { const c = cloneConfig(); c.cdps.find(d => d.id===el.dataset.id).archived = act==="archive-cdp"; confirmRemove=null; saveConfig(c); break; }
     case "archive-dev": case "restore-dev": { const c = cloneConfig(); c.devs.find(d => d.id===el.dataset.id).archived = act==="archive-dev"; confirmRemove=null; saveConfig(c); break; }
     case "archive-proj": case "restore-proj": { const c = cloneConfig(); c.projects.find(p => p.id===el.dataset.id).archived = act==="archive-proj"; confirmRemove=null; saveConfig(c); break; }
     case "hue": { const c = cloneConfig(); const p = c.projects.find(x => x.id===el.dataset.id); p.hue = HUES[(HUES.indexOf(p.hue)+1) % HUES.length]; saveConfig(c); break; }
@@ -1063,13 +1129,21 @@ document.addEventListener("change", ev => {
     if (db) enqueue("config/redmine", () => withRetry(() => db.doc("config/redmine").set(rmConfig)).catch(onWriteError));
     toast(`1 jour = ${num(v)} h — s’applique aux prochaines saisies et imports`); return;
   }
+  if (act === "proj-cdp") {
+    const c = cloneConfig(), p = c.projects.find(x => x.id===el.dataset.id), f = el.dataset.field;
+    if (el.value) p[f] = el.value; else delete p[f];
+    if (p.cdp && p.cdp === p.cdp2) { delete p[f==="cdp"?"cdp2":"cdp"]; toast("Le titulaire et le suppléant doivent être deux personnes différentes."); }
+    saveConfig(c); return;
+  }
   const name = el.value.trim(); if (!name) { render(); return; }
+  if (act==="rename-cdp") { const c = cloneConfig(); const d = c.cdps.find(x => x.id===el.dataset.id); if (d.name===name) return; d.name = name; saveConfig(c); toast("Nom mis à jour"); return; }
   const c = cloneConfig();
   if (act==="rename-dev") { const d = c.devs.find(x => x.id===el.dataset.id); if (d.name===name) return; d.name = name; saveConfig(c); toast("Prénom mis à jour"); }
   if (act==="rename-proj") { const p = c.projects.find(x => x.id===el.dataset.id); if (p.name===name) return; p.name = name; saveConfig(c); toast("Projet renommé"); }
 });
 document.addEventListener("submit", ev => {
   const f = ev.target; ev.preventDefault();
+  if (f.dataset.form === "cdp") { const v = $("#new-cdp").value.trim(); if (!v) return; const c = cloneConfig(); c.cdps = c.cdps || []; c.cdps.push({id:"cdp-"+slug(v,[...c.devs,...c.cdps].map(x => ({id:x.id.replace(/^cdp-/,"")}))), name:v}); saveConfig(c); toast(`${v} ajouté·e aux chefs de projet`); }
   if (f.dataset.form === "dev") { const v = $("#new-dev").value.trim(); if (!v) return; const c = cloneConfig(); c.devs.push({id:slug(v,c.devs), name:v}); saveConfig(c); toast(`${v} ajouté·e à l’équipe`); }
   if (f.dataset.form === "proj") { const v = $("#new-proj").value.trim(); if (!v) return; const c = cloneConfig(); const used = c.projects.map(p=>p.hue); const hue = HUES.find(h => !used.includes(h)) ?? Math.floor(Math.random()*360); c.projects.push({id:slug(v,c.projects), name:v, hue}); saveConfig(c); toast(`Projet « ${v} » ajouté`); }
   if (f.id === "abs-form") {
@@ -1091,7 +1165,8 @@ document.addEventListener("submit", ev => {
 document.addEventListener("keydown", ev => { if (ev.key==="Escape" && (!$("#editor").hidden || !$("#modal").hidden || !$("#imp").hidden)) closeAll(); });
 
 function openAbsence(){
-  $("#abs-dev").innerHTML = devs().map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("");
+  $("#abs-dev").innerHTML = `<optgroup label="Développeurs">${devs().map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</optgroup>`
+    + (cdps().length ? `<optgroup label="Chefs de projet">${cdps().map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("")}</optgroup>` : "");
   $("#abs-type").innerHTML = Object.entries(ABS).map(([k,a]) => `<option value="${k}">${a.label} (${a.code})</option>`).join("");
   $("#abs-from").value = weekStart; $("#abs-to").value = addDays(weekStart,4);
   $("#editor").hidden = true; $("#modal").hidden = false; $("#scrim").hidden = false;
