@@ -377,6 +377,7 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
     <div class="brand">
       <h1>Planning Dev</h1>
       <span class="sync" id="sync">Connexion…</span>
+      <button class="btn ghost" id="lock" hidden>Verrouiller</button>
           </div>
     <div class="tabs" role="tablist" aria-label="Vues">
       <button role="tab" id="tab-week" data-act="view" data-view="plan" aria-selected="true">Planning</button>
@@ -421,10 +422,14 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
 </div>
 <div class="modal wide" id="imp" hidden role="dialog" aria-labelledby="imp-title"></div>
 <div class="login" id="login">
-  <div class="login-card">
+  <form class="login-card" id="login-form">
     <h1>Planning Dev</h1>
-    <p class="hint" id="login-msg" role="status">Connexion…</p>
-  </div>
+    <p>Entrez le mot de passe de l’équipe pour accéder au planning.</p>
+    <label for="login-pwd">Mot de passe</label>
+    <input class="field" type="password" id="login-pwd" required autocomplete="current-password">
+    <button class="btn primary" id="login-btn" type="submit">Entrer</button>
+    <p class="hint" id="login-msg" role="status"></p>
+  </form>
 </div>
 <div class="toast" id="toast" hidden role="status" aria-live="polite"></div>
 
@@ -1287,6 +1292,8 @@ function openAbsence(){
 /* ---------- Boot (Supabase) ---------- */
 const SUPABASE_URL = "https://aiatoobtuudshpadkvxy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_-7GP_soJYiOQj72r8PZAWQ_zZA6qBOl";
+// Compte d'équipe créé dans Supabase. Le mot de passe n'est pas ici : Supabase le vérifie.
+const TEAM_EMAIL = "equipe-planning@example.com";
 
 function deepMerge(a, b){
   if (!a || typeof a !== "object" || Array.isArray(a) || !b || typeof b !== "object" || Array.isArray(b)) return b;
@@ -1354,13 +1361,22 @@ render();
   if (!window.supabase) { mode = "local"; render(); toast("Impossible de charger Supabase : vérifiez la connexion."); return; }
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   let started = false;
-  const start = () => { if (started) return; started = true; $("#login").hidden = true; db = makeDb(sb); startData(); };
+  const start = () => { if (started) return; started = true; $("#login").hidden = true; $("#lock").hidden = false; db = makeDb(sb); startData(); };
+  const showGate = msg => { $("#login").hidden = false; $("#login-msg").textContent = msg || ""; setTimeout(() => $("#login-pwd").focus(), 0); };
   const {data} = await sb.auth.getSession();
-  if (data.session) return start();
-  // Pas de vérification par e-mail : chaque navigateur ouvre une session anonyme, gardée ensuite.
-  const {error} = await sb.auth.signInAnonymously();
-  if (error) { $("#login-msg").textContent = "Connexion impossible : " + error.message; return; }
-  start();
+  const s0 = data.session;
+  if (s0 && s0.user && s0.user.email === TEAM_EMAIL) start();
+  else { if (s0) await sb.auth.signOut(); showGate(); }
+  $("#login-form").addEventListener("submit", async ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    const pwd = $("#login-pwd").value; if (!pwd) return;
+    const btn = $("#login-btn"); btn.disabled = true; $("#login-msg").textContent = "Vérification…";
+    const {error} = await sb.auth.signInWithPassword({email: TEAM_EMAIL, password: pwd});
+    btn.disabled = false; $("#login-pwd").value = "";
+    if (error) { showGate(/invalid/i.test(error.message) ? "Mot de passe incorrect." : "Connexion impossible : " + error.message); return; }
+    start();
+  }, true);
+  $("#lock").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
 })();
 })();
 </script>
