@@ -379,8 +379,7 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
       <span class="sync" id="sync">Connexion…</span>
           </div>
     <div class="tabs" role="tablist" aria-label="Vues">
-      <button role="tab" id="tab-week" data-act="view" data-view="week" aria-selected="true">Semaine</button>
-      <button role="tab" id="tab-ov" data-act="view" data-view="overview" aria-selected="false">6 semaines</button>
+      <button role="tab" id="tab-week" data-act="view" data-view="plan" aria-selected="true">Planning</button>
       <button role="tab" id="tab-rep" data-act="view" data-view="report" aria-selected="false">Bilan du mois</button>
       <button role="tab" id="tab-set" data-act="view" data-view="settings" aria-selected="false">Équipe &amp; projets</button>
     </div>
@@ -394,6 +393,7 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
       <span class="rel" id="rel"></span>
     </div>
     <div class="actions" id="actions">
+      <div class="segctl" role="group" aria-label="Affichage du planning"><button data-act="view" data-view="week" id="mode-week">Semaine</button><button data-act="view" data-view="overview" id="mode-ov">6 semaines</button></div>
       <button class="btn ghost" data-act="thisweek">Cette semaine</button>
       <button class="btn" data-act="copyprev" id="btn-copy">Reprendre la semaine précédente</button>
       <button class="btn primary" data-act="absence">Poser une absence</button>
@@ -491,6 +491,7 @@ let addVal = 1;
 let confirmRemove = null;
 let repMonth = t0.slice(0,7);
 let repDev = "all";
+let planMode = "week";
 let repEdit = false;
 let actuals = {};
 let rmConfig = {hoursPerDay:7.5, users:[], projects:[]};
@@ -551,7 +552,11 @@ function renderBar(){
   $("#rel").textContent = rel;
   $("#weekbar").hidden = view === "settings" || view === "report" || view === "cdp";
   document.querySelectorAll("#actions [data-act=copyprev], #actions [data-act=absence]").forEach(b => b.disabled = readOnly);
-  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view)));
+  const isPlan = view === "week" || view === "overview";
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view || (b.dataset.view === "plan" && isPlan))));
+  $("#mode-week").setAttribute("aria-pressed", String(view === "week"));
+  $("#mode-ov").setAttribute("aria-pressed", String(view === "overview"));
+  $("#btn-copy").hidden = view !== "week";
   const sync = $("#sync");
   sync.className = "sync " + (mode==="live"?"live":mode==="local"?"local":"");
   sync.textContent = mode==="live" ? (readOnly?"Lecture seule":"Partagé avec l’équipe · en direct")
@@ -1130,7 +1135,7 @@ document.addEventListener("click", ev => {
   const el = ev.target.closest("[data-act]"); if (!el) return;
   const act = el.dataset.act;
   switch (act) {
-    case "view": view = el.dataset.view; confirmRemove=null; if (view!=="week") closeAll(); else render(); break;
+    case "view": view = el.dataset.view === "plan" ? planMode : el.dataset.view; if (view === "week" || view === "overview") planMode = view; confirmRemove=null; if (view!=="week") closeAll(); else render(); break;
     case "prev": weekStart = addDays(weekStart,-7); sel.clear(); $("#editor").hidden=true; $("#scrim").hidden=true; render(); break;
     case "next": weekStart = addDays(weekStart, 7); sel.clear(); $("#editor").hidden=true; $("#scrim").hidden=true; render(); break;
     case "thisweek": weekStart = mondayOf(t0); render(); break;
@@ -1147,8 +1152,8 @@ document.addEventListener("click", ev => {
       break;
     }
     case "selcol": { const d = el.dataset.date; sel = new Set(devs().map(x => x.id+"|"+d)); if (sel.size) openEditor([...sel][0]); break; }
-    case "gotoweek": weekStart = el.dataset.week; view = "week"; render(); break;
-    case "gotocell": { const k = el.dataset.key; weekStart = mondayOf(k.split("|")[1]); view = "week"; sel = new Set([k]); openEditor(k); break; }
+    case "gotoweek": weekStart = el.dataset.week; view = planMode = "week"; render(); break;
+    case "gotocell": { const k = el.dataset.key; weekStart = mondayOf(k.split("|")[1]); view = planMode = "week"; sel = new Set([k]); openEditor(k); break; }
     case "closeall": closeAll(); break;
     case "addval": addVal = +el.dataset.v; renderEditor(); break;
     case "pickp": pick("p", el.dataset.id); break;
