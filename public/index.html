@@ -1033,7 +1033,28 @@ function setupToc(){
   document.querySelectorAll(".setsec").forEach(s => tocObs.observe(s));
 }
 
+/* Une adresse par page : #planning, #6-semaines, #bilan, #equipe */
+const ROUTES = {"planning":"week", "6-semaines":"overview", "bilan":"report", "equipe":"settings"};
+const ROUTE_TITLES = {week:"Planning", overview:"6 semaines", report:"Bilan du mois", settings:"Équipe & projets"};
+function applyHash(){
+  let h = ""; try { h = decodeURIComponent(location.hash.slice(1)); } catch {}
+  const v = ROUTES[h];
+  if (!v || v === view) return false;
+  view = v; if (v === "week" || v === "overview") planMode = v;
+  return true;
+}
+function syncHash(){
+  const r = Object.keys(ROUTES).find(k => ROUTES[k] === view); if (!r) return;
+  try {
+    if (location.hash !== "#"+r) { if (location.hash) history.pushState(null, "", "#"+r); else history.replaceState(null, "", "#"+r); }
+    document.title = "Planning Dev · " + ROUTE_TITLES[view];
+  } catch {}
+}
+window.addEventListener("hashchange", () => { if (applyHash()) { confirmRemove = null; if (view !== "week") closeAll(); else render(); } });
+window.addEventListener("popstate", () => { if (applyHash()) { confirmRemove = null; if (view !== "week") closeAll(); else render(); } });
+
 function render(){
+  syncHash();
   renderBar();
   const main = $("#main");
   const focusId = document.activeElement && document.activeElement.id;
@@ -1356,6 +1377,7 @@ function startData(){
   db.collection("weeks").onSnapshot(s => { const next = {}; for (const d of s.docs) next[d.id] = d.data(); weeks = next; render(); });
 }
 
+applyHash();
 render();
 (async () => {
   if (!window.supabase) { mode = "local"; render(); toast("Impossible de charger Supabase : vérifiez la connexion."); return; }
