@@ -910,6 +910,11 @@ function renderReport(){
       + `</tbody></table></div></section>`;
   }
 
+  const aRows = Object.entries(r.A).sort((a,b) => b[1].total - a[1].total);
+  h += `<section class="panel"><h2>Absences du mois</h2>`;
+  h += aRows.length ? `<ul class="abslist">${aRows.map(([k,o]) => `<li>${chip({abs:k,v:1})}<span class="num">${n(o.total)} j</span><span class="when">${single ? "le "+esc(o.dates.join(", ")) : esc(Object.entries(o.by).map(([id,v]) => devName(id)+" "+n(v)).join(" · "))}</span></li>`).join("")}</ul>`
+    : `<p class="empty-note">Aucune absence ce mois-ci.</p>`;
+  h += `</section>`;
   {
     const data = c.rows.filter(x => x.tr > 0).map(x => ({pid:x.pid, v:x.tr, by:x.real})).sort((a,b) => b.v - a.v);
     const tot = data.reduce((s,x) => s + x.v, 0);
@@ -933,11 +938,7 @@ function renderReport(){
     h += `</section>`;
   }
 
-  const aRows = Object.entries(r.A).sort((a,b) => b[1].total - a[1].total);
-  h += `<section class="panel"><h2>Absences du mois</h2>`;
-  h += aRows.length ? `<ul class="abslist">${aRows.map(([k,o]) => `<li>${chip({abs:k,v:1})}<span class="num">${n(o.total)} j</span><span class="when">${single ? "le "+esc(o.dates.join(", ")) : esc(Object.entries(o.by).map(([id,v]) => devName(id)+" "+n(v)).join(" · "))}</span></li>`).join("")}</ul>`
-    : `<p class="empty-note">Aucune absence ce mois-ci.</p>`;
-  h += `</section><p class="hint">Prévu = planning. Réel = temps saisis dans Redmine, convertis en jours (${num(rmConfig.hoursPerDay)} h = 1 jour). Les jours fériés ne comptent pas comme ouvrés.</p>`;
+  h += `<p class="hint">Prévu = planning. Réel = temps saisis dans Redmine, convertis en jours (${num(rmConfig.hoursPerDay)} h = 1 jour). Les jours fériés ne comptent pas comme ouvrés.</p>`;
   return h;
 }
 function reportTSV(){
