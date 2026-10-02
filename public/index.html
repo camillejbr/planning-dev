@@ -307,6 +307,17 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
   .toc a.on{border-bottom-color:var(--accent)}
 }
 .tagcdp{font-family:var(--mono);font-size:9.5px;font-weight:500;padding:1px 4px;border-radius:4px;border:1px solid var(--line-strong);color:var(--muted);vertical-align:1px}
+div.dayhead,div.who-btn{cursor:default}
+div.dayhead:hover .dname{color:var(--muted)}
+div.who-btn:hover .name{color:inherit}
+.cell.ro{cursor:default}
+.cell.ro:hover{background:transparent}
+.cell.ro.holiday:hover{background:repeating-linear-gradient(135deg,var(--hol-bg) 0 6px,var(--hol-stripe) 6px 12px)}
+.chip.mg{flex-direction:column;align-items:flex-start;gap:0;white-space:normal;padding:4px 8px}
+.chip.mg small{font-weight:400;font-size:11px;opacity:.9}
+.chip.mg.bk{border-style:dashed;border-width:1.5px}
+.chip.mg.gone{opacity:.6}
+.seg.bk{background-image:repeating-linear-gradient(135deg,transparent 0 3px,rgb(255 255 255 / .35) 3px 6px)}
 /* Settings */
 .settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px;align-items:start}
 @media (max-width:820px){.settings{grid-template-columns:minmax(0,1fr)}}
@@ -396,6 +407,7 @@ table.rep-t{border-collapse:collapse;width:100%;font-variant-numeric:tabular-num
     </div>
     <div class="actions" id="actions">
       <div class="segctl" role="group" aria-label="Affichage du planning"><button data-act="view" data-view="week" id="mode-week">Semaine</button><button data-act="view" data-view="overview" id="mode-ov">6 semaines</button></div>
+      <div class="segctl" role="group" aria-label="Point de vue"><button data-act="persp" data-v="dev" id="persp-dev">Développeurs</button><button data-act="persp" data-v="cdp" id="persp-cdp">CDP</button></div>
       <button class="btn ghost" data-act="thisweek">Cette semaine</button>
       <button class="btn" data-act="copyprev" id="btn-copy">Reprendre la semaine précédente</button>
       <button class="btn primary" data-act="absence">Poser une absence</button>
@@ -498,6 +510,7 @@ let confirmRemove = null;
 let repMonth = t0.slice(0,7);
 let repDev = "all";
 let planMode = "week";
+let persp = "dev", repCdp = "all";
 let repEdit = false;
 let actuals = {};
 let rmConfig = {hoursPerDay:7.5, users:[], projects:[]};
@@ -562,14 +575,138 @@ function renderBar(){
   document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view || (b.dataset.view === "plan" && isPlan))));
   $("#mode-week").setAttribute("aria-pressed", String(view === "week"));
   $("#mode-ov").setAttribute("aria-pressed", String(view === "overview"));
-  $("#btn-copy").hidden = view !== "week";
+  $("#btn-copy").hidden = view !== "week" || persp === "cdp";
+  $("#persp-dev").setAttribute("aria-pressed", String(persp === "dev"));
+  $("#persp-cdp").setAttribute("aria-pressed", String(persp === "cdp"));
+  document.querySelector("#actions [data-act=absence]").hidden = persp === "cdp";
   const sync = $("#sync");
   sync.className = "sync " + (mode==="live"?"live":mode==="local"?"local":"");
   sync.textContent = mode==="live" ? (readOnly?"Lecture seule":"Partagé avec l’équipe · en direct")
     : mode==="local" ? "Mode local — les modifications ne sont pas partagées" : "Connexion…";
 }
 
+/* ---------- Point de vue CDP ---------- */
+const NOCDP = "_sans";
+const perspSwitch = () => `<div class="segctl" role="group" aria-label="Point de vue"><button data-act="persp" data-v="dev" aria-pressed="${persp==="dev"}">Développeurs</button><button data-act="persp" data-v="cdp" aria-pressed="${persp==="cdp"}">CDP</button></div>`;
+const noCdpNote = () => `<section class="panel"><p class="empty-note">Aucun chef de projet pour l’instant. Ajoutez-les dans « Équipe &amp; projets », puis associez-les aux projets.</p></section>`;
+/* Projets suivis par un CDP un jour donné (celui qui gère ce jour-là : titulaire, ou suppléant si le titulaire est absent). */
+function managedDay(cid, d){
+  const m = {};
+  for (const dv of devs()) for (const e of cellOf(dv.id, d)) {
+    if (!e.p) continue;
+    const c = cdpFor(e.p, d), key = c ? c.id : NOCDP;
+    if (key !== cid) continue;
+    const o = m[e.p] ??= {pid:e.p, devs:[], v:0, backup:!!(c && c.backup), gone:!!(c && c.absent)};
+    o.devs.push({id:dv.id, v:e.v}); o.v += e.v;
+  }
+  return Object.values(m).sort((a,b) => b.v - a.v);
+}
+function cdpRows(days){
+  const rows = cdps().map(c => ({id:c.id, name:c.name}));
+  if (days.some(d => managedDay(NOCDP, d).length)) rows.push({id:NOCDP, name:"Sans CDP", none:true});
+  return rows;
+}
+function renderWeekCdp(){
+  if (!cdps().length) return noCdpNote();
+  const days = [0,1,2,3,4].map(i => addDays(weekStart,i));
+  let h = `<div class="grid-wrap"><table class="grid"><colgroup><col class="who">${days.map(()=>"<col>").join("")}</colgroup><thead><tr><th class="corner">Chefs de projet</th>`;
+  days.forEach((d,i) => { const hol = holiday(d);
+    h += `<th><div class="dayhead${d===t0?" today":""}"><span class="dname">${DAYS_LONG[i]}</span><span class="dnum">${dm(d)}</span>${hol?`<span class="hol">Férié · ${esc(hol)}</span>`:""}</div></th>`; });
+  h += `</tr></thead><tbody>`;
+  const loads = [], absences = [];
+  for (const c of cdpRows(days)) {
+    let tot = 0, off = 0, cells = ""; const byProj = {};
+    days.forEach((d,i) => {
+      const hol = holiday(d), mine = managedDay(c.id, d);
+      const abs = c.none ? [] : cellOf(c.id, d).filter(e => e.abs);
+      for (const e of abs) { off += e.v; absences.push({dev:c.id, abs:e.abs, v:e.v, i}); }
+      for (const m of mine) { tot += m.v; byProj[m.pid] = (byProj[m.pid]||0) + m.v; }
+      cells += `<td><div class="cell ro${hol?" holiday":""}">${abs.map(e => chip(e)).join("")}${mine.map(m => { const p = proj(m.pid) || {name:m.pid, hue:0};
+        return `<span class="chip mg${m.backup?" bk":""}${m.gone?" gone":""}" style="--h:${p.hue}" title="${m.backup?"En tant que suppléant·e":m.gone?"CDP absent·e, pas de suppléant disponible":""}"><span>${esc(p.name)}${m.backup?` <b>suppl.</b>`:m.gone?` <b>non couvert</b>`:""}</span><small>${esc(m.devs.map(x => devName(x.id)+(x.v<1?" ½":"")).join(", "))}</small></span>`; }).join("")
+        || (abs.length ? "" : hol ? `<span class="holtag">Férié</span>` : "")}</div></td>`;
+    });
+    loads.push({c, tot, byProj});
+    h += `<tr><th><div class="who-btn"><span class="name">${esc(c.name)}</span><span class="meta">${c.none ? `<span class="todo">projets sans CDP</span>` : `${Object.keys(byProj).length} projet${Object.keys(byProj).length>1?"s":""} · ${fmtV(tot)} j-dev${off ? ` · <span class="todo">absent·e ${fmtV(off)} j</span>` : ""}`}</span></div></th>${cells}</tr>`;
+  }
+  h += `</tbody></table></div><p class="hint">Chaque case montre les projets que le CDP gère ce jour-là et les développeurs qui y travaillent. « suppl. » = il ou elle remplace le titulaire absent. Les affectations se modifient depuis le point de vue Développeurs.</p>`;
+  const max = Math.max(5, ...loads.map(l => l.tot));
+  let s = `<div class="summary"><section class="panel"><h2>Charge suivie par CDP</h2><div class="load">` + loads.map(l =>
+    `<div class="pname"><span>${esc(l.c.name)}</span></div><div class="bar" style="--h:230"><i style="width:${(l.tot/max*100).toFixed(1)}%"></i><em>${esc(Object.entries(l.byProj).sort((a,b)=>b[1]-a[1]).map(([pid,v]) => (proj(pid)||{name:pid}).name+" "+fmtV(v)).join(" · ") || "aucun projet cette semaine")}</em></div><div class="num">${fmtV(l.tot)} j</div>`).join("") + `</div></section><section class="panel"><h2>Absences des CDP</h2>`;
+  const grouped = {};
+  for (const a of absences) { const k = a.dev+"|"+a.abs; (grouped[k] ??= {dev:a.dev, abs:a.abs, days:[]}).days.push(DAYS_SHORT[a.i]+(a.v<1?" ½":"")); }
+  const g = Object.values(grouped);
+  s += g.length ? `<ul class="abslist">${g.map(x => `<li><span class="who">${esc(devName(x.dev))}</span>${chip({abs:x.abs,v:1})}<span class="when">${x.days.length===5?"toute la semaine":esc(x.days.join(", "))}</span></li>`).join("")}</ul>` : `<p class="empty-note">Tous les CDP sont présents.</p>`;
+  return h + s + `</section></div>`;
+}
+function renderOverviewCdp(){
+  if (!cdps().length) return noCdpNote();
+  const starts = Array.from({length:6}, (_,k) => addDays(weekStart, 7*k));
+  const all = starts.flatMap(w => [0,1,2,3,4].map(i => addDays(w,i)));
+  let h = `<div class="ov-wrap"><table class="ov"><thead><tr><th class="corner" rowspan="2">Chefs de projet</th>`;
+  h += starts.map(w => `<th class="wkhead" colspan="5"><button data-act="gotoweek" data-week="${w}"><span class="n">S${isoWeek(w)}</span><span class="r">${dm(w)}</span></button></th>`).join("");
+  h += `</tr><tr>` + starts.map(w => [0,1,2,3,4].map(i => { const d = addDays(w,i); return `<th class="dh${i===0?" first":""}${d===t0?" today":""}">${"LMMJV"[i]}${parse(d).getUTCDate()}</th>`; }).join("")).join("") + `</tr></thead><tbody>`;
+  for (const c of cdpRows(all)) {
+    h += `<tr><th>${esc(c.name)}</th>`;
+    for (const w of starts) for (let i=0;i<5;i++) {
+      const d = addDays(w,i), hol = holiday(d), mine = managedDay(c.id, d), abs = c.none ? [] : cellOf(c.id, d).filter(e => e.abs);
+      const tip = `${c.name} · ${DAYS_SHORT[i]} ${dm(d)}${hol?" · férié":""}${abs.length?" — "+abs.map(e => (ABS[e.abs]||{label:e.abs}).label).join(", "):""}${mine.length?" — "+mine.map(m => (proj(m.pid)||{name:m.pid}).name+" ("+m.devs.map(x => devName(x.id)).join(", ")+")"+(m.backup?" en suppléance":"")).join(" + "):""}`;
+      const segs = abs.map(e => `<span class="seg abs abs-${esc(e.abs)}" style="flex-grow:${e.v}">${esc((ABS[e.abs]||{code:"?"}).code)}</span>`).join("")
+        + mine.map(m => { const p = proj(m.pid) || {name:m.pid, hue:0}; return `<span class="seg${m.backup?" bk":""}" style="--h:${p.hue};flex-grow:${m.v}">${esc(abbr(p.name))}</span>`; }).join("");
+      h += `<td class="${i===0?"first":""}"><button class="ovc${hol?" holiday":""}" data-act="gotoweek" data-week="${w}" title="${esc(tip)}" aria-label="${esc(tip)}">${segs}</button></td>`;
+    }
+    h += `</tr>`;
+  }
+  h += `</tbody></table></div><div class="legend">${projects().map(p => `<span><i class="dot" style="--h:${p.hue}"></i>${esc(abbr(p.name))} = ${esc(p.name)}</span>`).join("")}</div>
+    <p class="hint">Couleurs = projets gérés ce jour-là, proportionnels au nombre de développeurs dessus. Hachuré = en suppléance. Cliquez une case pour ouvrir la semaine.</p>`;
+  return h;
+}
+function renderReportCdp(){
+  const keep = repDev; repDev = "all"; const r = monthData(), c = compareData(r); repDev = keep;
+  const hasReal = c.withReal.length > 0, n = v => v ? num(v) : "–";
+  const owner = pid => { const p = proj(pid); return (p && p.cdp && cdps().some(x => x.id === p.cdp)) ? p.cdp : NOCDP; };
+  const single = repCdp !== "all" && (repCdp === NOCDP || cdps().some(x => x.id === repCdp));
+  const rows = single ? c.rows.filter(x => owner(x.pid) === repCdp) : c.rows;
+  const tp = rows.reduce((s,x) => s+x.tp, 0), tr = rows.reduce((s,x) => s+x.tr, 0), gapT = Math.round((tr-tp)*100)/100;
+  const label = id => id === NOCDP ? "Sans CDP" : devName(id);
+  let h = `<section class="repbar">
+    <div class="nav"><button class="arrow" data-act="mprev" aria-label="Mois précédent">‹</button>
+      <div class="wlabel"><span class="wk">Bilan mensuel · point de vue CDP</span><span class="range">${MONTHS_FULL[r.m-1]} ${r.y}</span></div>
+      <button class="arrow" data-act="mnext" aria-label="Mois suivant">›</button></div>
+    <div class="actions">${perspSwitch()}<div class="filters" role="group" aria-label="Filtrer par CDP">
+      <button class="fchip" data-act="repcdp" data-id="all" aria-pressed="${!single}">Tous les CDP</button>
+      ${cdps().map(d => `<button class="fchip" data-act="repcdp" data-id="${d.id}" aria-pressed="${repCdp===d.id}">${esc(d.name)}</button>`).join("")}
+    </div></div></section>`;
+  if (!cdps().length) return h + noCdpNote();
+  h += `<div class="tiles">
+    <div class="tile"><span class="tl">Prévu sur ${single?"ses":"les"} projets</span><span class="tv">${n(tp)} <small>j</small></span></div>
+    <div class="tile"><span class="tl">Réel Redmine</span><span class="tv">${hasReal ? n(tr)+" <small>j</small>" : "–"}</span></div>
+    <div class="tile${hasReal && Math.abs(gapT)>=1?" warn":""}"><span class="tl">Écart réel − prévu</span><span class="tv">${hasReal ? (gapT>0?"+":gapT<0?"−":"")+num(Math.abs(gapT))+" <small>j</small>" : "–"}</span></div>
+    <div class="tile"><span class="tl">Projets</span><span class="tv">${rows.length}</span></div></div>`;
+  h += `<section class="panel"><div class="phead"><h2>${single ? "Projets de "+esc(label(repCdp)) : "Prévu vs réel par CDP"}</h2></div>`;
+  if (!hasReal) h += `<p class="notice">Aucun temps réel pour ${MONTHS_FULL[r.m-1]} : importez Redmine depuis le point de vue Développeurs.</p>`;
+  if (!rows.length) h += `<p class="empty-note">Rien de prévu ni de saisi sur ce mois${single?" pour ses projets (en tant que titulaire)":""}.</p>`;
+  else if (!single) {
+    const groups = {};
+    for (const x of rows) { const g = groups[owner(x.pid)] ??= {tp:0, tr:0, projs:[]}; g.tp += x.tp; g.tr += x.tr; g.projs.push(x.pid); }
+    const order = [...cdps().map(x => x.id), NOCDP].filter(id => groups[id]);
+    h += `<div class="rep-wrap"><table class="rep-t cmp"><thead><tr><th>CDP titulaire</th><th style="text-align:left">Projets</th><th>Prévu</th><th>Réel</th><th>Écart</th></tr></thead><tbody>`
+      + order.map(id => { const g = groups[id];
+        return `<tr><th><button class="linkish" data-act="repcdp" data-id="${id}">${esc(label(id))}</button></th><td style="text-align:left;white-space:normal">${g.projs.map(pid => { const p = pinfo(pid); return `<span class="pn"><i class="dot${p.other?" other":""}" style="--h:${p.hue}"></i>${esc(p.name)}</span>`; }).join("")}</td><td>${n(g.tp)}</td><td>${hasReal?n(g.tr):"–"}</td><td>${gapHtml(g.tp,g.tr,hasReal)}</td></tr>`; }).join("")
+      + `</tbody><tfoot><tr><th>Total</th><td></td><td>${n(tp)}</td><td>${hasReal?n(tr):"–"}</td><td>${gapHtml(tp,tr,hasReal)}</td></tr></tfoot></table></div>`;
+  } else {
+    const who = r.who.filter(d => rows.some(x => x.plan[d.id] || x.real[d.id]));
+    const has = id => c.withReal.some(d => d.id === id);
+    h += `<div class="rep-wrap"><table class="rep-t cmp"><thead><tr><th>Projet</th>${who.map(d => `<th>${esc(d.name)}<span class="sub">réel · prévu</span></th>`).join("")}<th>Prévu</th><th>Réel</th><th>Écart</th></tr></thead><tbody>`
+      + rows.map(x => { const p = pinfo(x.pid);
+        return `<tr><th><span class="pname"><i class="dot${p.other?" other":""}" style="--h:${p.hue}"></i>${esc(p.name)}</span></th>${who.map(d => { const pl = x.plan[d.id], re = x.real[d.id];
+          if (!pl && !re) return `<td class="muted">·</td>`;
+          return `<td class="${has(d.id) && Math.abs(re-pl)>=1?"hl":""}"><b>${has(d.id)?n(re):"?"}</b><span class="p"> · ${n(pl)}</span></td>`; }).join("")}<td>${n(x.tp)}</td><td>${hasReal?n(x.tr):"–"}</td><td>${gapHtml(x.tp,x.tr,hasReal)}</td></tr>`; }).join("")
+      + `</tbody><tfoot><tr><th>Total</th>${who.map(() => `<td></td>`).join("")}<td>${n(tp)}</td><td>${hasReal?n(tr):"–"}</td><td>${gapHtml(tp,tr,hasReal)}</td></tr></tfoot></table></div>`;
+  }
+  return h + `</section><p class="hint">Les projets sont rattachés à leur CDP titulaire. Chaque case : <b>réel</b> · prévu, en jours.</p>`;
+}
 function renderWeek(){
+  if (persp === "cdp") return renderWeekCdp();
   const days = [0,1,2,3,4].map(i => addDays(weekStart,i));
   let h = `<div class="grid-wrap"><table class="grid"><colgroup><col class="who">${days.map(()=>"<col>").join("")}</colgroup><thead><tr><th class="corner">Équipe</th>`;
   days.forEach((d,i) => {
@@ -627,6 +764,7 @@ function renderWeek(){
 }
 
 function renderOverview(){
+  if (persp === "cdp") return renderOverviewCdp();
   const W = 6, starts = Array.from({length:W}, (_,k) => addDays(weekStart, 7*k));
   let h = `<div class="ov-wrap"><table class="ov"><thead><tr><th class="corner" rowspan="2">Équipe</th>`;
   h += starts.map(w => `<th class="wkhead" colspan="5"><button data-act="gotoweek" data-week="${w}"><span class="n">S${isoWeek(w)}</span><span class="r">${dm(w)}</span></button></th>`).join("");
@@ -697,6 +835,7 @@ function gapHtml(plan, real, has){
   return `<span class="${Math.abs(d)>=1?"gapbig":"gapsm"}">${d>0?"+":"−"}${num(Math.abs(d))}</span>`;
 }
 function renderReport(){
+  if (persp === "cdp") return renderReportCdp();
   const r = monthData(), c = compareData(r);
   const single = repDev !== "all";
   const hasReal = c.withReal.length > 0;
@@ -705,10 +844,10 @@ function renderReport(){
     <div class="nav"><button class="arrow" data-act="mprev" aria-label="Mois précédent">‹</button>
       <div class="wlabel"><span class="wk">Bilan mensuel</span><span class="range">${MONTHS_FULL[r.m-1]} ${r.y}</span></div>
       <button class="arrow" data-act="mnext" aria-label="Mois suivant">›</button></div>
-    <div class="filters" role="group" aria-label="Filtrer par personne">
+    <div class="actions">${perspSwitch()}<div class="filters" role="group" aria-label="Filtrer par personne">
       <button class="fchip" data-act="repdev" data-id="all" aria-pressed="${!single}">Toute l’équipe</button>
       ${devs().map(d => `<button class="fchip" data-act="repdev" data-id="${d.id}" aria-pressed="${repDev===d.id}">${esc(d.name)}</button>`).join("")}
-    </div></section>`;
+    </div></div></section>`;
   const gapT = Math.round((c.totReal - r.planned)*100)/100;
   h += `<div class="tiles">
     <div class="tile"><span class="tl">Prévu sur projets</span><span class="tv">${n(r.planned)} <small>j</small></span></div>
@@ -778,7 +917,7 @@ function reportTSV(){
 }
 
 /* ---------- Redmine import ---------- */
-const normTxt = s => String(s).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+const normTxt = s => String(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 function parseCSV(text){
   text = text.replace(/^﻿/, "");
   const first = text.split(/\r?\n/)[0] || "";
@@ -1150,7 +1289,7 @@ function saveConfig(next){
 }
 const cloneConfig = () => JSON.parse(JSON.stringify(config));
 function slug(name, list){
-  let base = name.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "x";
+  let base = name.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "x";
   let id = base, n = 2; while (list.some(x => x.id===id)) id = base+"-"+(n++);
   return id;
 }
@@ -1204,6 +1343,8 @@ document.addEventListener("click", ev => {
     case "absence": openAbsence(); break;
     case "mprev": case "mnext": { let [y,m] = repMonth.split("-").map(Number); m += act==="mnext" ? 1 : -1; if (m<1){m=12;y--;} if (m>12){m=1;y++;} repMonth = y+"-"+pad(m); render(); break; }
     case "repdev": repDev = el.dataset.id; render(); break;
+    case "repcdp": repCdp = el.dataset.id; render(); break;
+    case "persp": persp = el.dataset.v; closeAll(); break;
     case "act-edit": repEdit = !repEdit; render(); break;
     case "imp-open": openImport(); break;
     case "imp-back": imp.step = 1; imp.error = ""; renderImport(); break;
