@@ -927,7 +927,7 @@ function renderReport(){
     : `<p class="empty-note">Aucune absence ce mois-ci.</p>`;
   h += `</section>`;
   {
-    const data = c.rows.filter(x => x.tr > 0).map(x => ({pid:x.pid, v:x.tr, by:x.real})).sort((a,b) => b.v - a.v);
+    const data = c.rows.filter(x => x.tr > 0 && x.pid !== OTHER).map(x => ({pid:x.pid, v:x.tr, by:x.real})).sort((a,b) => b.v - a.v);
     const tot = data.reduce((s,x) => s + x.v, 0);
     h += `<section class="panel"><h2>Répartition du temps réel par projet${single ? " · "+esc(devName(repDev)) : ""}</h2>`;
     if (!data.length) h += `<p class="empty-note">Aucun temps réel ${single ? "pour "+esc(devName(repDev))+" " : ""}en ${MONTHS_FULL[r.m-1]}. Le camembert apparaîtra dès que les temps Redmine seront importés ou saisis.</p>`;
@@ -944,7 +944,7 @@ function renderReport(){
         <ul class="pie-legend">${data.map(x => { const p = pinfo(x.pid);
           return `<li><i class="dot${p.other?" other":""}" style="--h:${p.hue}"></i><span class="pl-name">${esc(p.name)}</span><span class="pl-val">${num(x.v)} j</span><span class="pl-pct">${Math.round(x.v/tot*100)} %</span></li>`; }).join("")}
           <li class="total"><i></i><span class="pl-name">Total</span><span class="pl-val">${num(tot)} j</span><span class="pl-pct">100 %</span></li></ul></div>
-        <p class="hint">Temps réels saisis dans Redmine, ${MONTHS_FULL[r.m-1]} ${r.y}. Survolez une part pour le détail.</p>`;
+        <p class="hint">Temps réels saisis dans Redmine, ${MONTHS_FULL[r.m-1]} ${r.y}, hors « Hors planning » (réunions). Survolez une part pour le détail.</p>`;
     }
     h += `</section>`;
   }
