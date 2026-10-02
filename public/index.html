@@ -318,6 +318,8 @@ div.who-btn:hover .name{color:inherit}
 .chip.mg.bk{border-style:dashed;border-width:1.5px}
 .chip.mg.gone{opacity:.6}
 .seg.bk{background-image:repeating-linear-gradient(135deg,transparent 0 3px,rgb(255 255 255 / .35) 3px 6px)}
+.abshead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.abshead .btn{padding:5px 10px;font-size:13px}
 /* Settings */
 .settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px;align-items:start}
 @media (max-width:820px){.settings{grid-template-columns:minmax(0,1fr)}}
@@ -428,7 +430,7 @@ div.who-btn:hover .name{color:inherit}
       <label>Au (inclus)<input class="field" type="date" id="abs-to" required></label>
     </div>
     <label>Durée par jour<select class="field" id="abs-dur"><option value="1">Journée entière</option><option value="0.5">Demi-journée</option></select></label>
-    <p class="hint">Les week-ends et jours fériés sont ignorés. Une absence d’une journée remplace ce qui était prévu ces jours-là.</p>
+    <p class="hint">Même fenêtre pour les développeurs et les chefs de projet. Les week-ends et jours fériés sont ignorés. Pour un développeur, une absence d’une journée remplace ce qui était prévu ces jours-là.</p>
     <div class="foot"><button type="button" class="btn ghost" data-act="closeall">Annuler</button><button type="submit" class="btn primary">Enregistrer l’absence</button></div>
   </form>
 </div>
@@ -576,7 +578,6 @@ function renderBar(){
   $("#mode-ov").setAttribute("aria-pressed", String(view === "overview"));
   $("#persp-dev").setAttribute("aria-pressed", String(persp === "dev"));
   $("#persp-cdp").setAttribute("aria-pressed", String(persp === "cdp"));
-  document.querySelector("#actions [data-act=absence]").hidden = persp === "cdp";
   const sync = $("#sync");
   sync.className = "sync " + (mode==="live"?"live":mode==="local"?"local":"");
   sync.textContent = mode==="live" ? (readOnly?"Lecture seule":"Partagé avec l’équipe · en direct")
@@ -1086,27 +1087,28 @@ function cdpRanges(id){
   }
   return out;
 }
-function cdpCard(c){
+/* Fiche d'une personne (dev ou CDP) : nom, statut du jour, absences, bouton unique « Poser une absence ». */
+function personCard(c, kind){
+  const isC = kind === "cdp", k = isC ? "c" : "d";
   const limit = addDays(t0, -30);
-  const owned = projects().filter(p => p.cdp === c.id), backs = projects().filter(p => p.cdp2 === c.id);
   const ranges = cdpRanges(c.id).filter(r => r.to >= limit);
   const now = ranges.find(r => r.from <= t0 && r.to >= t0);
   const pn = p => `<span class="pn"><i class="dot" style="--h:${p.hue}"></i>${esc(p.name)}</span>`;
+  let roles = "";
+  if (isC) {
+    const owned = projects().filter(p => p.cdp === c.id), backs = projects().filter(p => p.cdp2 === c.id);
+    roles = `<p class="roles">${owned.length ? `<span class="rl">Titulaire</span>${owned.map(pn).join("")}` : `<span class="rl">Titulaire</span><span class="muted">aucun projet</span>`}${backs.length ? `<br><span class="rl">Suppléant</span>${backs.map(pn).join("")}` : ""}</p>`;
+  }
   return `<article class="cdpcard">
-    <div class="row"><input type="text" class="field cname" id="cdp-name-${c.id}" data-act="rename-cdp" data-id="${c.id}" value="${esc(c.name)}" aria-label="Nom du CDP" ${readOnly?"disabled":""}>
+    <div class="row"><input type="text" class="field cname" id="${isC?"cdp":"dev"}-name-${c.id}" data-act="rename-${isC?"cdp":"dev"}" data-id="${c.id}" value="${esc(c.name)}" aria-label="${isC?"Nom du CDP":"Prénom"}" ${readOnly?"disabled":""}>
       <span class="rel${now?" off":""}">${now ? "Absent·e aujourd’hui" : "Présent·e"}</span>${
-      confirmRemove===("c:"+c.id) ? `<button class="btn danger" data-act="archive-cdp" data-id="${c.id}">Confirmer</button><button class="btn ghost" data-act="cancel-remove">Non</button>`
-      : `<button class="btn ghost" data-act="ask-remove" data-id="c:${c.id}" ${readOnly?"disabled":""}>Retirer</button>`}</div>
-    <p class="roles">${owned.length ? `<span class="rl">Titulaire</span>${owned.map(pn).join("")}` : `<span class="rl">Titulaire</span><span class="muted">aucun projet</span>`}${backs.length ? `<br><span class="rl">Suppléant</span>${backs.map(pn).join("")}` : ""}</p>
-    <h4>Congés et absences</h4>
+      confirmRemove===(k+":"+c.id) ? `<button class="btn danger" data-act="archive-${isC?"cdp":"dev"}" data-id="${c.id}">Confirmer</button><button class="btn ghost" data-act="cancel-remove">Non</button>`
+      : `<button class="btn ghost" data-act="ask-remove" data-id="${k}:${c.id}" ${readOnly?"disabled":""}>Retirer</button>`}</div>
+    ${roles}
+    <div class="abshead"><h4>Congés et absences</h4><button class="btn" data-act="absence" data-who="${c.id}" ${readOnly?"disabled":""}>Poser une absence</button></div>
     ${ranges.length ? `<ul class="ranges">${ranges.map(r => `<li class="${r.to < t0 ? "past" : ""}">${chip({abs:r.abs, v:1})}<span class="when">${r.from===r.to ? DAYS_SHORT[dayIdx(r.from)]+" "+dm(r.from) : dm(r.from)+" → "+dm(r.to)}</span><span class="num">${fmtV(r.days)} j</span><button class="x" data-act="cdpabs-del" data-id="${c.id}" data-dates="${r.dates.join(",")}" aria-label="Supprimer cette absence" title="Supprimer" ${readOnly?"disabled":""}>×</button></li>`).join("")}</ul>`
       : `<p class="empty-note">Aucune absence prévue.</p>`}
-    <form class="cdpabs" data-form="cdpabs" data-id="${c.id}">
-      <label>Du<input class="field" type="date" id="cabs-from-${c.id}" required ${readOnly?"disabled":""}></label>
-      <label>Au<input class="field" type="date" id="cabs-to-${c.id}" required ${readOnly?"disabled":""}></label>
-      <label>Motif<select class="field" id="cabs-type-${c.id}" ${readOnly?"disabled":""}>${Object.entries(ABS).map(([k,a]) => `<option value="${k}">${a.label}</option>`).join("")}</select></label>
-      <button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter l’absence</button>
-    </form></article>`;
+  </article>`;
 }
 function renderSettings(){
   const dRow = d => `<div class="row"><input type="text" class="field" id="dev-name-${d.id}" data-act="rename-dev" data-id="${d.id}" value="${esc(d.name)}" aria-label="Prénom" ${readOnly?"disabled":""}>${
@@ -1134,16 +1136,16 @@ function renderSettings(){
     </nav>
     <div class="setmain">
     <section class="setsec" id="sec-devs">
-      <header><h2>Développeurs</h2><p class="sub">Les lignes du planning. Retirer quelqu’un le masque du planning sans effacer son historique.</p></header>
-      <div class="panel">
-        <div class="rows">${devs().map(dRow).join("")}</div>
-        <form class="row addrow" data-form="dev"><input type="text" class="field" id="new-dev" placeholder="Prénom" aria-label="Nouveau développeur" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter</button></form>
+      <header><h2>Développeurs</h2><p class="sub">Les lignes du planning. Leurs absences apparaissent dans leurs cases du planning. Retirer quelqu’un le masque sans effacer son historique.</p></header>
+      ${devs().length ? `<div class="cdpgrid">${devs().map(d => personCard(d, "dev")).join("")}</div>` : ""}
+      <div class="panel slim">
+        <form class="row" data-form="dev"><input type="text" class="field" id="new-dev" placeholder="Prénom" aria-label="Nouveau développeur" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter un développeur</button></form>
         ${archD.length?`<details class="archived"><summary>${archD.length} retiré${archD.length>1?"s":""}</summary>${archD.map(d=>`<div class="row"><span style="flex:1">${esc(d.name)}</span><button class="btn ghost" data-act="restore-dev" data-id="${d.id}">Réintégrer</button></div>`).join("")}</details>`:""}
       </div>
     </section>
     <section class="setsec" id="sec-cdp">
-      <header><h2>Chefs de projet</h2><p class="sub">Leurs congés ne s’affichent pas sur le planning, mais ils décident qui gère : quand le titulaire d’un projet est absent toute la journée, le suppléant prend sa place (étiquette en pointillés sur les cases).</p></header>
-      ${cdps().length ? `<div class="cdpgrid">${cdps().map(cdpCard).join("")}</div>` : `<div class="panel"><p class="empty-note">Aucun chef de projet pour l’instant.</p></div>`}
+      <header><h2>Chefs de projet</h2><p class="sub">Leurs absences se posent de la même façon que pour les développeurs, avec « Poser une absence ». Elles décident qui gère : quand le titulaire d’un projet est absent toute la journée, le suppléant prend sa place (étiquette en pointillés sur les cases).</p></header>
+      ${cdps().length ? `<div class="cdpgrid">${cdps().map(c => personCard(c, "cdp")).join("")}</div>` : `<div class="panel"><p class="empty-note">Aucun chef de projet pour l’instant.</p></div>`}
       <div class="panel slim">
         <form class="row" data-form="cdp"><input type="text" class="field" id="new-cdp" placeholder="Prénom Nom" aria-label="Nouveau chef de projet" ${readOnly?"disabled":""}><button class="btn" type="submit" ${readOnly?"disabled":""}>Ajouter un CDP</button></form>
         ${archC.length?`<details class="archived"><summary>${archC.length} retiré${archC.length>1?"s":""}</summary>${archC.map(d=>`<div class="row"><span style="flex:1">${esc(d.name)}</span><button class="btn ghost" data-act="restore-cdp" data-id="${d.id}">Réintégrer</button></div>`).join("")}</details>`:""}
@@ -1327,7 +1329,7 @@ document.addEventListener("click", ev => {
     case "drm": draft.splice(+el.dataset.i,1); renderEditor(); break;
     case "save": { const n = sel.size; writeCells([...sel].map(k => { const [dv,date]=k.split("|"); return {dev:dv,date,entries:draft.map(e=>({...e}))}; })); closeAll(); toast(n>1?`${n} cases enregistrées`:"Case enregistrée"); break; }
     case "clearcells": { const n = sel.size; writeCells([...sel].map(k => { const [dv,date]=k.split("|"); return {dev:dv,date,entries:[]}; })); closeAll(); toast(n>1?`${n} cases vidées`:"Case vidée"); break; }
-    case "absence": openAbsence(); break;
+    case "absence": openAbsence(el.dataset.who); break;
     case "mprev": case "mnext": { let [y,m] = repMonth.split("-").map(Number); m += act==="mnext" ? 1 : -1; if (m<1){m=12;y--;} if (m>12){m=1;y++;} repMonth = y+"-"+pad(m); render(); break; }
     case "repdev": repDev = el.dataset.id; render(); break;
     case "repcdp": repCdp = el.dataset.id; render(); break;
@@ -1358,7 +1360,7 @@ document.addEventListener("click", ev => {
       t.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start"});
       break;
     }
-    case "cdpabs-del": { const id = el.dataset.id, ds = el.dataset.dates.split(","); writeCells(ds.map(date => ({dev:id, date, entries:[]}))); toast(`Absence de ${devName(id)} supprimée`); break; }
+    case "cdpabs-del": { const id = el.dataset.id, ds = el.dataset.dates.split(","); writeCells(ds.map(date => ({dev:id, date, entries:cellOf(id, date).filter(e => !e.abs).map(e => ({...e}))}))); toast(`Absence de ${devName(id)} supprimée`); break; }
     case "archive-cdp": case "restore-cdp": { const c = cloneConfig(); c.cdps.find(d => d.id===el.dataset.id).archived = act==="archive-cdp"; confirmRemove=null; saveConfig(c); break; }
     case "archive-dev": case "restore-dev": { const c = cloneConfig(); c.devs.find(d => d.id===el.dataset.id).archived = act==="archive-dev"; confirmRemove=null; saveConfig(c); break; }
     case "archive-proj": case "restore-proj": { const c = cloneConfig(); c.projects.find(p => p.id===el.dataset.id).archived = act==="archive-proj"; confirmRemove=null; saveConfig(c); break; }
@@ -1432,10 +1434,12 @@ document.addEventListener("submit", ev => {
 });
 document.addEventListener("keydown", ev => { if (ev.key==="Escape" && (!$("#editor").hidden || !$("#modal").hidden || !$("#imp").hidden)) closeAll(); });
 
-function openAbsence(){
-  $("#abs-dev").innerHTML = devs().map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("");
+function openAbsence(who){
+  const opt = d => `<option value="${d.id}"${d.id===who?" selected":""}>${esc(d.name)}</option>`;
+  $("#abs-dev").innerHTML = `<optgroup label="Développeurs">${devs().map(opt).join("")}</optgroup>` + (cdps().length ? `<optgroup label="Chefs de projet">${cdps().map(opt).join("")}</optgroup>` : "");
   $("#abs-type").innerHTML = Object.entries(ABS).map(([k,a]) => `<option value="${k}">${a.label} (${a.code})</option>`).join("");
-  $("#abs-from").value = weekStart; $("#abs-to").value = addDays(weekStart,4);
+  const inPlan = view === "week" || view === "overview";
+  $("#abs-from").value = inPlan ? weekStart : t0; $("#abs-to").value = inPlan ? addDays(weekStart,4) : t0;
   $("#editor").hidden = true; $("#modal").hidden = false; $("#scrim").hidden = false;
   $("#abs-dev").focus();
 }
