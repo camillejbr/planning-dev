@@ -409,7 +409,6 @@ div.who-btn:hover .name{color:inherit}
       <div class="segctl" role="group" aria-label="Affichage du planning"><button data-act="view" data-view="week" id="mode-week">Semaine</button><button data-act="view" data-view="overview" id="mode-ov">6 semaines</button></div>
       <div class="segctl" role="group" aria-label="Point de vue"><button data-act="persp" data-v="dev" id="persp-dev">Développeurs</button><button data-act="persp" data-v="cdp" id="persp-cdp">CDP</button></div>
       <button class="btn ghost" data-act="thisweek">Cette semaine</button>
-      <button class="btn" data-act="copyprev" id="btn-copy">Reprendre la semaine précédente</button>
       <button class="btn primary" data-act="absence">Poser une absence</button>
     </div>
   </section>
@@ -570,12 +569,11 @@ function renderBar(){
   const rel = diff===0?"Cette semaine":diff===1?"Semaine prochaine":diff===-1?"Semaine dernière":diff>1?`Dans ${diff} semaines`:`Il y a ${-diff} semaines`;
   $("#rel").textContent = rel;
   $("#weekbar").hidden = view === "settings" || view === "report" || view === "cdp";
-  document.querySelectorAll("#actions [data-act=copyprev], #actions [data-act=absence]").forEach(b => b.disabled = readOnly);
+  document.querySelectorAll("#actions [data-act=absence]").forEach(b => b.disabled = readOnly);
   const isPlan = view === "week" || view === "overview";
   document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view || (b.dataset.view === "plan" && isPlan))));
   $("#mode-week").setAttribute("aria-pressed", String(view === "week"));
   $("#mode-ov").setAttribute("aria-pressed", String(view === "overview"));
-  $("#btn-copy").hidden = view !== "week" || persp === "cdp";
   $("#persp-dev").setAttribute("aria-pressed", String(persp === "dev"));
   $("#persp-cdp").setAttribute("aria-pressed", String(persp === "cdp"));
   document.querySelector("#actions [data-act=absence]").hidden = persp === "cdp";
@@ -1329,17 +1327,6 @@ document.addEventListener("click", ev => {
     case "drm": draft.splice(+el.dataset.i,1); renderEditor(); break;
     case "save": { const n = sel.size; writeCells([...sel].map(k => { const [dv,date]=k.split("|"); return {dev:dv,date,entries:draft.map(e=>({...e}))}; })); closeAll(); toast(n>1?`${n} cases enregistrées`:"Case enregistrée"); break; }
     case "clearcells": { const n = sel.size; writeCells([...sel].map(k => { const [dv,date]=k.split("|"); return {dev:dv,date,entries:[]}; })); closeAll(); toast(n>1?`${n} cases vidées`:"Case vidée"); break; }
-    case "copyprev": {
-      const prev = addDays(weekStart,-7), changes = [];
-      for (const dv of devs()) for (let i=0;i<5;i++) {
-        const d = addDays(weekStart,i); if (holiday(d) || cellOf(dv.id,d).length) continue;
-        const src = cellOf(dv.id, addDays(prev,i)).filter(e => e.p);
-        if (src.length) changes.push({dev:dv.id, date:d, entries:src.map(e => ({...e}))});
-      }
-      if (!changes.length) toast("Rien à reprendre : les cases sont déjà remplies ou la semaine précédente n’a pas de projet.");
-      else { writeCells(changes); toast(`${changes.length} case${changes.length>1?"s":""} reprise${changes.length>1?"s":""} de la semaine ${isoWeek(prev)} (les cases déjà remplies n’ont pas bougé)`); }
-      break;
-    }
     case "absence": openAbsence(); break;
     case "mprev": case "mnext": { let [y,m] = repMonth.split("-").map(Number); m += act==="mnext" ? 1 : -1; if (m<1){m=12;y--;} if (m>12){m=1;y++;} repMonth = y+"-"+pad(m); render(); break; }
     case "repdev": repDev = el.dataset.id; render(); break;
