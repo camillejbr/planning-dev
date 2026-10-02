@@ -352,6 +352,7 @@ div.who-btn:hover .name{color:inherit}
 .meetbox{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;margin:0 0 16px;padding:12px 14px;border-radius:10px;background:var(--accent-soft);font-size:13px;line-height:1.55}
 .meetbox>div{flex:1 1 380px;min-width:0}
 .meetlist{display:block;margin-top:6px}
+#act-panel{scroll-margin-top:16px}
 /* Settings */
 .settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px;align-items:start}
 @media (max-width:820px){.settings{grid-template-columns:minmax(0,1fr)}}
@@ -892,6 +893,23 @@ function renderReport(){
   const srcs = r.who.filter(d => c.src[d.id]).map(d => `${esc(d.name)} : ${esc(c.src[d.id])}`);
   if (srcs.length) h += `<p class="hint">Origine du réel — ${srcs.join(" · ")}</p>`;
   h += `</section>`;
+  if (repEdit) {
+    const hpd = rmConfig.hoursPerDay || 7.5;
+    const pids = [...new Set([...projects().map(p => p.id), ...c.rows.map(x => x.pid), OTHER])];
+    h += `<section class="panel" id="act-panel"><div class="phead"><h2>Saisie des temps réels · ${MONTHS_FULL[r.m-1]}</h2><button class="btn" data-act="act-edit">Terminé</button></div>
+      <div class="hpdrow"><label for="act-hpd">1 jour =</label><input class="field actin" id="act-hpd" data-act="hpd" inputmode="decimal" value="${num(hpd)}" ${readOnly?"disabled":""}><span>heures</span></div>
+      <p class="sub">Saisissez des <b>heures</b> (ex. 15, 7,5 ou 7h30) : elles sont converties en jours automatiquement. Chaque valeur est enregistrée dès que vous quittez le champ.</p>
+      <div class="meetbox"><div><b>Réunions (Hors planning)</b> — calculées d’après le planning du mois : 1 h le lundi par famille de projets (Ibexa, Drupal) pour les développeurs concernés et présents, puis un daily de 15 min par projet et par jour du mardi au vendredi.
+        <span class="meetlist">${r.who.map(d => { const mh = meetingHours(d.id, repMonth); return `${esc(d.name)} : <b>${num(mh.hours)} h</b> <span class="muted">(${mh.weekly} réunion${mh.weekly>1?"s":""} + ${mh.daily} daily${mh.daily>1?"s":""})</span>`; }).join(" · ")}</span></div>
+        <button class="btn primary" data-act="meet-fill" ${readOnly?"disabled":""}>Pré-remplir Hors planning</button></div>
+      <div class="rep-wrap"><table class="rep-t act"><thead><tr><th>Projet</th>${r.who.map(d => `<th>${esc(d.name)}</th>`).join("")}</tr></thead><tbody>`
+      + pids.map(pid => { const p = pinfo(pid);
+        return `<tr><th><span class="pname"><i class="dot${p.other?" other":""}" style="--h:${p.hue}"></i>${esc(p.name)}</span></th>${r.who.map(d => {
+          const v = (c.R[d.id] && c.R[d.id][pid]) || 0;
+          return `<td><span class="hin"><input class="field actin" id="act-${d.id}-${pid}" inputmode="decimal" data-act="act-in" data-dev="${d.id}" data-pid="${pid}" value="${v?num(v*hpd):""}" placeholder="${pid===OTHER ? "≈ "+num(meetingHours(d.id, repMonth).hours) : "0"}" aria-label="${esc(d.name)} · ${esc(p.name)}, en heures" ${readOnly?"disabled":""}><span class="u">h</span></span><span class="eq">${v?"= "+num(v)+" j":""}</span></td>`; }).join("")}</tr>`; }).join("")
+      + `</tbody></table></div></section>`;
+  }
+
   {
     const data = c.rows.filter(x => x.tr > 0).map(x => ({pid:x.pid, v:x.tr, by:x.real})).sort((a,b) => b.v - a.v);
     const tot = data.reduce((s,x) => s + x.v, 0);
@@ -913,23 +931,6 @@ function renderReport(){
         <p class="hint">Temps réels saisis dans Redmine, ${MONTHS_FULL[r.m-1]} ${r.y}. Survolez une part pour le détail.</p>`;
     }
     h += `</section>`;
-  }
-
-  if (repEdit) {
-    const hpd = rmConfig.hoursPerDay || 7.5;
-    const pids = [...new Set([...projects().map(p => p.id), ...c.rows.map(x => x.pid), OTHER])];
-    h += `<section class="panel"><div class="phead"><h2>Saisie des temps réels · ${MONTHS_FULL[r.m-1]}</h2><button class="btn" data-act="act-edit">Terminé</button></div>
-      <div class="hpdrow"><label for="act-hpd">1 jour =</label><input class="field actin" id="act-hpd" data-act="hpd" inputmode="decimal" value="${num(hpd)}" ${readOnly?"disabled":""}><span>heures</span></div>
-      <p class="sub">Saisissez des <b>heures</b> (ex. 15, 7,5 ou 7h30) : elles sont converties en jours automatiquement. Chaque valeur est enregistrée dès que vous quittez le champ.</p>
-      <div class="meetbox"><div><b>Réunions (Hors planning)</b> — calculées d’après le planning du mois : 1 h le lundi par famille de projets (Ibexa, Drupal) pour les développeurs concernés et présents, puis un daily de 15 min par projet et par jour du mardi au vendredi.
-        <span class="meetlist">${r.who.map(d => { const mh = meetingHours(d.id, repMonth); return `${esc(d.name)} : <b>${num(mh.hours)} h</b> <span class="muted">(${mh.weekly} réunion${mh.weekly>1?"s":""} + ${mh.daily} daily${mh.daily>1?"s":""})</span>`; }).join(" · ")}</span></div>
-        <button class="btn primary" data-act="meet-fill" ${readOnly?"disabled":""}>Pré-remplir Hors planning</button></div>
-      <div class="rep-wrap"><table class="rep-t act"><thead><tr><th>Projet</th>${r.who.map(d => `<th>${esc(d.name)}</th>`).join("")}</tr></thead><tbody>`
-      + pids.map(pid => { const p = pinfo(pid);
-        return `<tr><th><span class="pname"><i class="dot${p.other?" other":""}" style="--h:${p.hue}"></i>${esc(p.name)}</span></th>${r.who.map(d => {
-          const v = (c.R[d.id] && c.R[d.id][pid]) || 0;
-          return `<td><span class="hin"><input class="field actin" id="act-${d.id}-${pid}" inputmode="decimal" data-act="act-in" data-dev="${d.id}" data-pid="${pid}" value="${v?num(v*hpd):""}" placeholder="${pid===OTHER ? "≈ "+num(meetingHours(d.id, repMonth).hours) : "0"}" aria-label="${esc(d.name)} · ${esc(p.name)}, en heures" ${readOnly?"disabled":""}><span class="u">h</span></span><span class="eq">${v?"= "+num(v)+" j":""}</span></td>`; }).join("")}</tr>`; }).join("")
-      + `</tbody></table></div></section>`;
   }
 
   const aRows = Object.entries(r.A).sort((a,b) => b[1].total - a[1].total);
@@ -1373,7 +1374,7 @@ document.addEventListener("click", ev => {
       break;
     }
     case "persp": persp = el.dataset.v; closeAll(); break;
-    case "act-edit": repEdit = !repEdit; render(); break;
+    case "act-edit": repEdit = !repEdit; render(); if (repEdit) { const t = document.getElementById("act-panel"); if (t) t.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start"}); } break;
     case "imp-open": openImport(); break;
     case "imp-back": imp.step = 1; imp.error = ""; renderImport(); break;
     case "imp-analyze": {
