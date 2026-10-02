@@ -511,7 +511,7 @@ let confirmRemove = null;
 let repMonth = t0.slice(0,7);
 let repDev = "all";
 let planMode = "week";
-let persp = "dev", repCdp = "all";
+let persp = "dev";
 let repEdit = false;
 let actuals = {};
 let rmConfig = {hoursPerDay:7.5, users:[], projects:[]};
@@ -586,7 +586,6 @@ function renderBar(){
 
 /* ---------- Point de vue CDP ---------- */
 const NOCDP = "_sans";
-const perspSwitch = () => `<div class="segctl" role="group" aria-label="Point de vue"><button data-act="persp" data-v="dev" aria-pressed="${persp==="dev"}">Développeurs</button><button data-act="persp" data-v="cdp" aria-pressed="${persp==="cdp"}">CDP</button></div>`;
 const noCdpNote = () => `<section class="panel"><p class="empty-note">Aucun chef de projet pour l’instant. Ajoutez-les dans « Équipe &amp; projets », puis associez-les aux projets.</p></section>`;
 /* Projets suivis par un CDP un jour donné (celui qui gère ce jour-là : titulaire, ou suppléant si le titulaire est absent). */
 function managedDay(cid, d){
@@ -658,51 +657,6 @@ function renderOverviewCdp(){
   h += `</tbody></table></div><div class="legend">${projects().map(p => `<span><i class="dot" style="--h:${p.hue}"></i>${esc(abbr(p.name))} = ${esc(p.name)}</span>`).join("")}</div>
     <p class="hint">Couleurs = projets gérés ce jour-là, proportionnels au nombre de développeurs dessus. Hachuré = en suppléance. Cliquez une case pour ouvrir la semaine.</p>`;
   return h;
-}
-function renderReportCdp(){
-  const keep = repDev; repDev = "all"; const r = monthData(), c = compareData(r); repDev = keep;
-  const hasReal = c.withReal.length > 0, n = v => v ? num(v) : "–";
-  const owner = pid => { const p = proj(pid); return (p && p.cdp && cdps().some(x => x.id === p.cdp)) ? p.cdp : NOCDP; };
-  const single = repCdp !== "all" && (repCdp === NOCDP || cdps().some(x => x.id === repCdp));
-  const rows = single ? c.rows.filter(x => owner(x.pid) === repCdp) : c.rows;
-  const tp = rows.reduce((s,x) => s+x.tp, 0), tr = rows.reduce((s,x) => s+x.tr, 0), gapT = Math.round((tr-tp)*100)/100;
-  const label = id => id === NOCDP ? "Sans CDP" : devName(id);
-  let h = `<section class="repbar">
-    <div class="nav"><button class="arrow" data-act="mprev" aria-label="Mois précédent">‹</button>
-      <div class="wlabel"><span class="wk">Bilan mensuel · point de vue CDP</span><span class="range">${MONTHS_FULL[r.m-1]} ${r.y}</span></div>
-      <button class="arrow" data-act="mnext" aria-label="Mois suivant">›</button></div>
-    <div class="actions">${perspSwitch()}<div class="filters" role="group" aria-label="Filtrer par CDP">
-      <button class="fchip" data-act="repcdp" data-id="all" aria-pressed="${!single}">Tous les CDP</button>
-      ${cdps().map(d => `<button class="fchip" data-act="repcdp" data-id="${d.id}" aria-pressed="${repCdp===d.id}">${esc(d.name)}</button>`).join("")}
-    </div></div></section>`;
-  if (!cdps().length) return h + noCdpNote();
-  h += `<div class="tiles">
-    <div class="tile"><span class="tl">Prévu sur ${single?"ses":"les"} projets</span><span class="tv">${n(tp)} <small>j</small></span></div>
-    <div class="tile"><span class="tl">Réel Redmine</span><span class="tv">${hasReal ? n(tr)+" <small>j</small>" : "–"}</span></div>
-    <div class="tile${hasReal && Math.abs(gapT)>=1?" warn":""}"><span class="tl">Écart réel − prévu</span><span class="tv">${hasReal ? (gapT>0?"+":gapT<0?"−":"")+num(Math.abs(gapT))+" <small>j</small>" : "–"}</span></div>
-    <div class="tile"><span class="tl">Projets</span><span class="tv">${rows.length}</span></div></div>`;
-  h += `<section class="panel"><div class="phead"><h2>${single ? "Projets de "+esc(label(repCdp)) : "Prévu vs réel par CDP"}</h2></div>`;
-  if (!hasReal) h += `<p class="notice">Aucun temps réel pour ${MONTHS_FULL[r.m-1]} : importez Redmine depuis le point de vue Développeurs.</p>`;
-  if (!rows.length) h += `<p class="empty-note">Rien de prévu ni de saisi sur ce mois${single?" pour ses projets (en tant que titulaire)":""}.</p>`;
-  else if (!single) {
-    const groups = {};
-    for (const x of rows) { const g = groups[owner(x.pid)] ??= {tp:0, tr:0, projs:[]}; g.tp += x.tp; g.tr += x.tr; g.projs.push(x.pid); }
-    const order = [...cdps().map(x => x.id), NOCDP].filter(id => groups[id]);
-    h += `<div class="rep-wrap"><table class="rep-t cmp"><thead><tr><th>CDP titulaire</th><th style="text-align:left">Projets</th><th>Prévu</th><th>Réel</th><th>Écart</th></tr></thead><tbody>`
-      + order.map(id => { const g = groups[id];
-        return `<tr><th><button class="linkish" data-act="repcdp" data-id="${id}">${esc(label(id))}</button></th><td style="text-align:left;white-space:normal">${g.projs.map(pid => { const p = pinfo(pid); return `<span class="pn"><i class="dot${p.other?" other":""}" style="--h:${p.hue}"></i>${esc(p.name)}</span>`; }).join("")}</td><td>${n(g.tp)}</td><td>${hasReal?n(g.tr):"–"}</td><td>${gapHtml(g.tp,g.tr,hasReal)}</td></tr>`; }).join("")
-      + `</tbody><tfoot><tr><th>Total</th><td></td><td>${n(tp)}</td><td>${hasReal?n(tr):"–"}</td><td>${gapHtml(tp,tr,hasReal)}</td></tr></tfoot></table></div>`;
-  } else {
-    const who = r.who.filter(d => rows.some(x => x.plan[d.id] || x.real[d.id]));
-    const has = id => c.withReal.some(d => d.id === id);
-    h += `<div class="rep-wrap"><table class="rep-t cmp"><thead><tr><th>Projet</th>${who.map(d => `<th>${esc(d.name)}<span class="sub">réel · prévu</span></th>`).join("")}<th>Prévu</th><th>Réel</th><th>Écart</th></tr></thead><tbody>`
-      + rows.map(x => { const p = pinfo(x.pid);
-        return `<tr><th><span class="pname"><i class="dot${p.other?" other":""}" style="--h:${p.hue}"></i>${esc(p.name)}</span></th>${who.map(d => { const pl = x.plan[d.id], re = x.real[d.id];
-          if (!pl && !re) return `<td class="muted">·</td>`;
-          return `<td class="${has(d.id) && Math.abs(re-pl)>=1?"hl":""}"><b>${has(d.id)?n(re):"?"}</b><span class="p"> · ${n(pl)}</span></td>`; }).join("")}<td>${n(x.tp)}</td><td>${hasReal?n(x.tr):"–"}</td><td>${gapHtml(x.tp,x.tr,hasReal)}</td></tr>`; }).join("")
-      + `</tbody><tfoot><tr><th>Total</th>${who.map(() => `<td></td>`).join("")}<td>${n(tp)}</td><td>${hasReal?n(tr):"–"}</td><td>${gapHtml(tp,tr,hasReal)}</td></tr></tfoot></table></div>`;
-  }
-  return h + `</section><p class="hint">Les projets sont rattachés à leur CDP titulaire. Chaque case : <b>réel</b> · prévu, en jours.</p>`;
 }
 function renderWeek(){
   if (persp === "cdp") return renderWeekCdp();
@@ -834,7 +788,6 @@ function gapHtml(plan, real, has){
   return `<span class="${Math.abs(d)>=1?"gapbig":"gapsm"}">${d>0?"+":"−"}${num(Math.abs(d))}</span>`;
 }
 function renderReport(){
-  if (persp === "cdp") return renderReportCdp();
   const r = monthData(), c = compareData(r);
   const single = repDev !== "all";
   const hasReal = c.withReal.length > 0;
@@ -843,10 +796,10 @@ function renderReport(){
     <div class="nav"><button class="arrow" data-act="mprev" aria-label="Mois précédent">‹</button>
       <div class="wlabel"><span class="wk">Bilan mensuel</span><span class="range">${MONTHS_FULL[r.m-1]} ${r.y}</span></div>
       <button class="arrow" data-act="mnext" aria-label="Mois suivant">›</button></div>
-    <div class="actions">${perspSwitch()}<div class="filters" role="group" aria-label="Filtrer par personne">
+    <div class="filters" role="group" aria-label="Filtrer par personne">
       <button class="fchip" data-act="repdev" data-id="all" aria-pressed="${!single}">Toute l’équipe</button>
       ${devs().map(d => `<button class="fchip" data-act="repdev" data-id="${d.id}" aria-pressed="${repDev===d.id}">${esc(d.name)}</button>`).join("")}
-    </div></div></section>`;
+    </div></section>`;
   const gapT = Math.round((c.totReal - r.planned)*100)/100;
   h += `<div class="tiles">
     <div class="tile"><span class="tl">Prévu sur projets</span><span class="tv">${n(r.planned)} <small>j</small></span></div>
@@ -1332,7 +1285,6 @@ document.addEventListener("click", ev => {
     case "absence": openAbsence(el.dataset.who); break;
     case "mprev": case "mnext": { let [y,m] = repMonth.split("-").map(Number); m += act==="mnext" ? 1 : -1; if (m<1){m=12;y--;} if (m>12){m=1;y++;} repMonth = y+"-"+pad(m); render(); break; }
     case "repdev": repDev = el.dataset.id; render(); break;
-    case "repcdp": repCdp = el.dataset.id; render(); break;
     case "persp": persp = el.dataset.v; closeAll(); break;
     case "act-edit": repEdit = !repEdit; render(); break;
     case "imp-open": openImport(); break;
